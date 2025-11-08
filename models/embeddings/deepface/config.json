@@ -1,0 +1,12 @@
+{
+    "model_name": "deepface_embeddings",
+    "class": "DeepFaceEmbedder",
+    "module": "src.embeddings",
+    "parameters": {
+        "model_name":"ArcFace",
+        "dim": 512,
+        "enforce_detection": false,
+        "target_size": [112, 112],
+        "normalization": "base"
+    }
+}
