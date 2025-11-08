@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Visual Similarity Search</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+
+    <header class="navbar">
+        <div class="container">
+            <div class="navbar-brand">
+                <span class="logo-icon">🖼️</span>
+                <h1>ChromaSearch</h1>
+            </div>
+            <nav class="nav-links">
+                <ul>
+                    <li><a href="#search" class="nav-link active" data-tab="search">Search</a></li>
+                    <li><a href="#info" class="nav-link" data-tab="info">Info</a></li>
+                    <li><a href="#about" class="nav-link" data-tab="about">About</a></li>
+                </ul>
+            </nav>
+        </div>
+    </header>
+
+    <main class="container">
+        
+        <section id="search-content" class="tab-content active">
+            <div class="hero-section">
+                <h2>Find Visually Similar Images</h2>
+                <p>Upload an image to query our FAISS-powered vector database and discover the most similar results from our collection.</p>
+            </div>
+
+            <div id="upload-area">
+                <div id="drop-zone">
+                    <div id="upload-preview"></div>
+                    <div id="upload-instructions">
+                        <img src="https://img.icons8.com/pastel-glyph/64/008080/upload-to-cloud--v2.png" alt="Upload Icon" class="upload-icon">
+                        <p><strong>Drag & drop an image here</strong></p>
+                        <p class="small-text">or</p>
+                        <button type="button" id="browse-btn" class="btn">Browse Files</button>
+                    </div>
+                    <input type="file" id="file-input" accept="image/*" hidden>
+                </div>
+
+                <div id="upload-controls" class="hidden">
+                    <button type="button" id="search-btn" class="btn">Search</button>
+                    <button type="button" id="remove-btn" class="btn btn-secondary">Remove</button>
+                </div>
+            </div>
+
+            <section id="results-section" class="hidden">
+                <h3>Search Results</h3>
+                <div id="loader" class="hidden">
+                    <div class="spinner"></div>
+                    <p>Searching...</p>
+                </div>
+                <div id="results-grid">
+                    </div>
+                
+                <div id="reset-controls" class="hidden">
+                    <button type="button" id="start-again-btn" class="btn">Start Again</button>
+                </div>
+            </section>
+        </section>
+
+        <section id="info-content" class="tab-content hidden">
+            <div class="info-box">
+                <h2>How It Works</h2>
+                <p>This tool demonstrates the power of vector similarity search.</p>
+                <ol>
+                    <li><strong>Upload:</strong> You provide an image.</li>
+                    <li><strong>Embedding:</strong> A deep learning model (like CLIP or ResNet) converts your image into a numerical vector (an "embedding") that captures its semantic meaning.</li>
+                    <li><strong>FAISS Search:</strong> We use **FAISS** (Facebook AI Similarity Search), a high-speed library, to compare your image's vector against millions of pre-indexed vectors in our database.</li>
+                    <li><strong>Results:</strong> The system returns the images whose vectors are "closest" to your query image in the high-dimensional space.</li>
+                </ol>
+                <p>This demo simulates the FAISS backend call. In a real application, the JavaScript frontend would send the image to a server (e.g., Python with Flask/FastAPI) which would then perform the embedding and FAISS query.</p>
+            </div>
+        </section>
+
+        <section id="about-content" class="tab-content hidden">
+            <div class="info-box">
+                <h2>About This Project</h2>
+                <p>This is a conceptual demo for a visual search engine. The frontend is built with pure HTML, CSS, and JavaScript, while the (simulated) backend is designed to work with a powerful vector search library like FAISS.</p>
+                <p><strong>Stack:</strong></p>
+                <ul>
+                    <li><strong>Frontend:</strong> HTML5, CSS3 (Flexbox/Grid), JavaScript (ES6+)</li>
+                    <li><strong>Backend (Concept):</strong> Python, Flask/FastAPI, FAISS, PyTorch/TensorFlow (for embeddings)</li>
+                </ul>
+            </div>
+        </section>
+
+    </main>
+
+    <section class="carousel-section">
+        <h3>Example Dataset Images</h3>
+        <div class="carousel-container">
+            <div class="carousel-track">
+                <img src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?ixlib=rb-1.2.1&q=80&fm=jpg&crop=faces&fit=crop&h=200&w=200" alt="Face">
+                <img src="https://images.unsplash.com/photo-1531123897727-8f129e1688ce?ixlib=rb-1.2.1&q=80&fm=jpg&crop=faces&fit=crop&h=200&w=200" alt="Face">
+                <img src="https://images.unsplash.com/photo-1544005313-94ddf0286df2?ixlib=rb-1.2.1&q=80&fm=jpg&crop=faces&fit=crop&h=200&w=200" alt="Face">
+                <img src="https://images.unsplash.com/photo-1500648767791-00dcc994a43e?ixlib=rb-1.2.1&q=80&fm=jpg&crop=faces&fit=crop&h=200&w=200" alt="Face">
+                <img src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?ixlib=rb-1.2.1&q=80&fm=jpg&crop=faces&fit=crop&h=200&w=200" alt="Face">
+                <img src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?ixlib=rb-1.2.1&q=80&fm=jpg&crop=faces&fit=crop&h=200&w=200" alt="Face">
+                <img src="https://images.unsplash.com/photo-1521119989659-a83eee488004?ixlib=rb-1.2.1&q=80&fm=jpg&crop=faces&fit=crop&h=200&w=200" alt="Face">
+                <img src="https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?ixlib=rb-1.2.1&q=80&fm=jpg&crop=faces&fit=crop&h=200&w=200" alt="Face">
+                <img src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?ixlib=rb-1.2.1&q=80&fm=jpg&crop=faces&fit=crop&h=200&w=200" alt="Face">
+                <img src="https://images.unsplash.com/photo-1531123897727-8f129e1688ce?ixlib=rb-1.2.1&q=80&fm=jpg&crop=faces&fit=crop&h=200&w=200" alt="Face">
+                <img src="https://images.unsplash.com/photo-1544005313-94ddf0286df2?ixlib=rb-1.2.1&q=80&fm=jpg&crop=faces&fit=crop&h=200&w=200" alt="Face">
+                <img src="https://images.unsplash.com/photo-1500648767791-00dcc994a43e?ixlib=rb-1.2.1&q=80&fm=jpg&crop=faces&fit=crop&h=200&w=200" alt="Face">
+                <img src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?ixlib=rb-1.2.1&q=80&fm=jpg&crop=faces&fit=crop&h=200&w=200" alt="Face">
+                <img src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?ixlib=rb-1.2.1&q=80&fm=jpg&crop=faces&fit=crop&h=200&w=200" alt="Face">
+                <img src="httpss://images.unsplash.com/photo-1521119989659-a83eee488004?ixlib=rb-1.2.1&q=80&fm=jpg&crop=faces&fit=crop&h=200&w=200" alt="Face">
+                <img src="https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?ixlib=rb-1.2.1&q=80&fm=jpg&crop=faces&fit=crop&h=200&w=200" alt="Face">
+            </div>
+        </div>
+    </section>
+
+    <footer class="footer">
+        <p>&copy; 2025 Visual Search Demo. All rights reserved.</p>
+    </footer>
+    
+    <script src="script.js"></script>
+</body>
+</html>
