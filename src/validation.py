@@ -39,7 +39,7 @@ def validate_model(model):
 
     model = Path(model)
     if not model.is_dir():
-        raise TypeError(f"model has to be a directory.")
+        raise TypeError(f"model has to be a directory. You have {model}")
 
     model_config_file = model / "config.json"
     if not model_config_file.is_file():

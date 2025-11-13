@@ -11,6 +11,11 @@
     --shadow-small: 0 2px 8px rgba(0,0,0,0.05);
     --shadow-medium: 0 4px 12px rgba(0,0,0,0.1);
     --border-radius: 12px;
+
+    /* New colors for similarity */
+    --match-green: #28a745; /* Success */
+    --match-orange: #ffc107; /* Warning */
+    --match-red: #dc3545;   /* Danger */
 }
 
 * {
@@ -253,13 +258,87 @@ body {
     text-align: center;
 }
 
+/* --- NEW: Top Result Container --- */
+#top-result-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin-bottom: 3rem;
+    padding: 1.5rem;
+    background-color: var(--surface-color);
+    border-radius: var(--border-radius);
+    box-shadow: var(--shadow-medium);
+    animation: fadeIn 0.7s ease-out;
+}
+
+#top-result-image-wrapper {
+    width: 100%;
+    max-width: 400px; /* Make the top image a good size */
+    height: 300px;
+    margin-top: 1.5rem;
+    border-radius: var(--border-radius);
+    overflow: hidden;
+    box-shadow: var(--shadow-medium);
+    cursor: pointer; /* Indicate it's clickable */
+}
+
+#top-result-image-wrapper img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.match-percentage-display {
+    font-size: 2.5rem;
+    font-weight: 700;
+    margin-top: 1rem;
+    display: flex;
+    align-items: baseline;
+}
+
+.percentage-symbol {
+    font-size: 1.5rem;
+    margin-left: 0.2rem;
+}
+
+/* *
+ * --- THIS IS THE FIX ---
+ * By making the selectors more specific (e.g., .result-match-small.match-green),
+ * these rules will override the default "color: white" in .result-match-small.
+ *
+ */
+.match-percentage-display.match-green,
+#match-percentage-number.match-green,
+.result-match-small.match-green { 
+    color: var(--match-green); 
+}
+
+.match-percentage-display.match-orange,
+#match-percentage-number.match-orange,
+.result-match-small.match-orange { 
+    color: var(--match-orange); 
+}
+
+.match-percentage-display.match-red,
+#match-percentage-number.match-red,
+.result-match-small.match-red { 
+    color: var(--match-red); 
+}
+
+
 #results-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
     gap: 1.5rem;
 }
 
-#results-grid img {
+.result-item {
+    position: relative;
+    cursor: pointer; /* Indicate it's clickable */
+}
+
+.result-item img {
     width: 100%;
     height: 180px;
     object-fit: cover;
@@ -267,16 +346,25 @@ body {
     box-shadow: var(--shadow-small);
     transition: all 0.3s ease;
     animation: zoomIn 0.5s ease;
+    display: block; /* Remove extra space below img */
 }
 
-#results-grid img:hover {
+.result-item img:hover {
     transform: scale(1.05);
     box-shadow: var(--shadow-medium);
 }
 
-@keyframes zoomIn {
-    from { opacity: 0; transform: scale(0.8); }
-    to { opacity: 1; transform: scale(1); }
+.result-match-small {
+    position: absolute;
+    bottom: 8px;
+    right: 8px;
+    background-color: rgba(0, 0, 0, 0.7); /* Made it slightly darker */
+    color: white; /* This is the default, but will be overridden by the specific classes above */
+    padding: 0.3em 0.6em;
+    border-radius: 5px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    pointer-events: none; /* Don't block click on image */
 }
 
 /* Loader */
@@ -385,4 +473,66 @@ body {
     border-top: 1px solid var(--gray-light);
     font-size: 0.9rem;
     color: var(--gray-medium);
+}
+
+/* --- NEW: Image Modal (Lightbox) --- */
+.modal {
+    display: none; /* Hidden by default */
+    position: fixed; /* Stay in place */
+    z-index: 2000; /* Sit on top */
+    left: 0;
+    top: 0;
+    width: 100%; /* Full width */
+    height: 100%; /* Full height */
+    overflow: auto; /* Enable scroll if needed */
+    background-color: rgba(0, 0, 0, 0.9); /* Black w/ opacity */
+    justify-content: center;
+    align-items: center;
+    animation: fadeInModal 0.3s;
+}
+
+.modal.hidden {
+    display: none;
+}
+
+.modal.active {
+    display: flex;
+}
+
+.modal-content {
+    margin: auto;
+    display: block;
+    max-width: 90%;
+    max-height: 90%;
+    border-radius: var(--border-radius);
+    box-shadow: var(--shadow-medium);
+    animation: zoomInModal 0.4s;
+}
+
+.modal-close-btn {
+    position: absolute;
+    top: 20px;
+    right: 35px;
+    color: #f1f1f1;
+    font-size: 40px;
+    font-weight: bold;
+    transition: 0.3s;
+    cursor: pointer;
+}
+
+.modal-close-btn:hover,
+.modal-close-btn:focus {
+    color: #bbb;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+@keyframes fadeInModal {
+    from {opacity: 0} 
+    to {opacity: 1}
+}
+
+@keyframes zoomInModal {
+    from {transform: scale(0.8)} 
+    to {transform: scale(1)}
 }
