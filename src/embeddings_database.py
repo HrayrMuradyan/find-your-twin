@@ -67,12 +67,12 @@ class AutoFaissIndex:
                     if f.exists():
                         f.unlink()
 
-        # Initialize clean state
-        self.index = faiss.IndexIDMap(faiss.IndexFlatIP(self.dim))
-        self.emb_metadata = pd.DataFrame({
-            "id": pd.Series(dtype="int"),
-            "img_path": pd.Series(dtype="string")
-        })
+            # Initialize clean state
+            self.index = faiss.IndexIDMap(faiss.IndexFlatIP(self.dim))
+            self.emb_metadata = pd.DataFrame({
+                "id": pd.Series(dtype="int"),
+                "img_path": pd.Series(dtype="string")
+            })
     
     def add(self, embeddings, metadata):
         embeddings = np.array(embeddings, dtype=np.float32)
@@ -100,7 +100,7 @@ class AutoFaissIndex:
         # Save updated index and metadata
         self._save()
 
-    def search(self, query, k: int = 5, return_metadata: bool = True):
+    def search_query(self, query, k: int = 5, return_metadata: bool = True):
         query = np.array(query, dtype=np.float32)
         if query.ndim == 1:
             query = query.reshape(1, -1)
@@ -163,7 +163,7 @@ class AutoFaissIndex:
         if not isinstance(metadata, dict):
             raise TypeError(f"Argument metadata should be a dictionary. You have {type(metadata)}")
 
-        faces = self.face_detector.detect(img)
+        faces = self.face_detector.detect(image)
 
         for face in faces:
             embeddings = self.embedder.compute_embedding(face)
