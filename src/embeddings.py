@@ -56,7 +56,8 @@ class DeepFaceEmbedder:
             img (str, Path, or np.ndarray): Path to the image file, Path object, or a numpy array.
 
         Returns:
-            np.ndarray | None: 1D face embedding vector, or None if embedding fails.
+            np.ndarray | None: A 1D (dim,) L2-normalized face embedding vector,
+                             or None if embedding fails.
         """
         if isinstance(img, (str, Path)):
             image = read_image(img)
@@ -74,7 +75,29 @@ class DeepFaceEmbedder:
                 img=resized_img,
                 normalization=self.normalization
             )
-            return np.array(self.model.forward(normalized_img))
+
+            # 1. Get the raw embedding from the model
+            embedding = np.array(self.model.forward(normalized_img))
+
+            # 2. Squeeze the array to ensure it is 1D (e.g., (512,))
+            #    This handles both (1, 512) and (512,) inputs
+            embedding = embedding.squeeze()
+
+            # --- THIS IS THE LIGHTWEIGHT FIX (for 1D array) ---
+            
+            # 3. Calculate the L2 norm (a single number)
+            norm = np.linalg.norm(embedding)
+            
+            # 4. Add a tiny value (epsilon) to avoid division by zero
+            epsilon = np.finfo(embedding.dtype).eps
+            
+            # 5. Divide the 1D embedding by its norm
+            normalized_embedding = embedding / (norm + epsilon)
+            
+            # --------------------------------------------------
+            
+            # 6. Return the normalized (512,) embedding
+            return normalized_embedding.astype(np.float32)
 
         except Exception as e:
             print(f"[WARN] Failed to compute embedding: {e}")

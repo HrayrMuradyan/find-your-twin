@@ -115,7 +115,11 @@ class AutoFaissIndex:
         else:
             return distances, ids
 
-    def search_image(self, image, k: int = 5, return_metadata: bool = True):
+    def search_image(self,
+                     image,
+                     k: int = 5,
+                     return_metadata: bool = True,
+                     return_face: np.ndarray = False):
         self._ensure_models_loaded()
         
         if isinstance(image, (str, Path)):
@@ -129,14 +133,16 @@ class AutoFaissIndex:
         if not isinstance(return_metadata, bool):
             raise TypeError(f"Argument return_metadata should be a boolean. You have {type(return_metadata)}")
         
-        faces = self.face_detector.detect(image)
-        n_faces = len(faces)
+        face = self.face_detector.detect(image)
+        n_faces = len(face)
         if n_faces > 1:
             raise ValueError(f"There was more than 1 face detected in the image.")
         elif n_faces == 0:
             raise ValueError(f"No face was detected.")
+        
+        face = face[0]
 
-        query = self.embedder.compute_embeddings(faces[0])
+        query = self.embedder.compute_embeddings(face)
         query = np.array(query, dtype=np.float32)
         if query.ndim == 1:
             query = query.reshape(1, -1)
@@ -147,7 +153,11 @@ class AutoFaissIndex:
             results = []
             for row_ids in ids:
                 results.append(self.emb_metadata[self.emb_metadata['id'].isin(row_ids)])
-            return distances, ids, results
+            
+            if return_face:
+                return distances, ids, results, face
+            else:
+                return distances, ids, results
         else:
             return distances, ids
 
@@ -235,6 +245,7 @@ class AutoFaissIndex:
         """Load an existing FAISS index and metadata from disk."""
         print("Loading existing FAISS index...")
         self.index = faiss.read_index(str(self.index_file))
+        print(type(self.index))
         self.emb_metadata = pd.read_parquet(self.emb_metadata_file)
 
         with self.index_metadata_file.open() as f:

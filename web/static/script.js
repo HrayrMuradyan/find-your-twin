@@ -8,12 +8,8 @@ document.addEventListener('DOMContentLoaded', () => {
         link.addEventListener('click', (e) => {
             e.preventDefault();
             const tab = link.getAttribute('data-tab');
-
-            // Update active link
             navLinks.forEach(nav => nav.classList.remove('active'));
             link.classList.add('active');
-
-            // Update active content
             tabContents.forEach(content => {
                 if (content.id === `${tab}-content`) {
                     content.classList.remove('hidden');
@@ -23,6 +19,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     content.classList.add('hidden');
                 }
             });
+            window.scrollTo({ top: 0, behavior: 'auto' }); // Scroll to top on tab change
         });
     });
 
@@ -34,6 +31,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const uploadControls = document.getElementById('upload-controls');
     const searchBtn = document.getElementById('search-btn');
     const removeBtn = document.getElementById('remove-btn');
+    const consentCheckbox = document.getElementById('consent-checkbox');
+    const consentBox = document.querySelector('.consent-box');
     
     // --- Results Elements ---
     const resultsSection = document.getElementById('results-section');
@@ -41,35 +40,71 @@ document.addEventListener('DOMContentLoaded', () => {
     const topResultContainer = document.getElementById('top-result-container');
     const topResultImageWrapper = document.getElementById('top-result-image-wrapper');
     const matchPercentageNumber = document.getElementById('match-percentage-number');
-    const resultsGrid = document.getElementById('results-grid'); // For other results
+    const otherResultsTitle = document.querySelector('.other-results-title');
     const resetControls = document.getElementById('reset-controls');
     const startAgainBtn = document.getElementById('start-again-btn');
+    const saveInfo = document.getElementById('save-info');
+    const userUuid = document.getElementById('user-uuid');
+    const copyUuidBtn = document.getElementById('copy-uuid-btn'); 
+
+    // --- Carousel Elements ---
+    const carouselContainer = document.getElementById('carousel-container');
+    const carouselTrack = document.getElementById('carousel-track');
+    const carouselPrev = document.getElementById('carousel-prev');
+    const carouselNext = document.getElementById('carousel-next');
+
+    // --- Carousel State ---
+    let currentIndex = 0; // Tracks the *starting item index*
+    let itemsPerPage = 5; // Show 5 items at a time
+    let totalItems = 0;
 
     // --- Image Modal Elements ---
     const imageModal = document.getElementById('image-modal');
     const modalImage = document.getElementById('modal-image');
     const modalCloseBtn = document.querySelector('.modal-close-btn');
 
+    // --- About Page CTA ---
+    const ctaTryNowBtn = document.getElementById('cta-try-now');
+    const consentPrivacyLink = document.getElementById('consent-privacy-link'); // For consent box link
+    const aboutPrivacyLink = document.querySelector('.about-privacy-link'); // For about page link
+
+    // --- NEW: Manage Data Elements ---
+    const deleteForm = document.getElementById('delete-form');
+    const uuidInput = document.getElementById('uuid-input');
+    const deleteBtn = document.getElementById('delete-btn');
+    const deleteMessage = document.getElementById('delete-message');
+
     // --- State Variable ---
     let currentFile = null;
+    
+    // --- Responsive Carousel ---
+    function updateItemsPerPage() {
+        if (window.innerWidth < 600) itemsPerPage = 2;
+        else if (window.innerWidth < 900) itemsPerPage = 3;
+        else if (window.innerWidth < 1100) itemsPerPage = 4;
+        else itemsPerPage = 5;
+    }
+    updateItemsPerPage(); // Initial check
+    window.addEventListener('resize', () => {
+        updateItemsPerPage();
+        if (totalItems > 0) {
+            updateCarouselPosition(); // Re-calculate position on resize
+        }
+    });
+
 
     // --- Uploader Event Listeners ---
-
-    // Trigger file input when "Browse" button is clicked
     browseBtn.addEventListener('click', (e) => {
-        e.stopPropagation(); // Prevent dropZone's click event
+        e.stopPropagation(); 
         fileInput.click();
     });
 
-    // Trigger file input when drop zone is clicked (only if no file is loaded)
     dropZone.addEventListener('click', (e) => {
-        // Only allow click on dropZone itself, not child elements like buttons/preview
-        if (!currentFile && e.target === dropZone) { 
+        if (!currentFile && e.target.closest('#upload-instructions')) { 
             fileInput.click();
         }
     });
 
-    // File input change event
     fileInput.addEventListener('change', (e) => {
         const file = e.target.files[0];
         if (file) {
@@ -77,7 +112,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Drag & Drop Events
     dropZone.addEventListener('dragover', (e) => {
         e.preventDefault();
         if (!currentFile) {
@@ -106,116 +140,227 @@ document.addEventListener('DOMContentLoaded', () => {
             alert('Please upload an image file.');
             return;
         }
-
         currentFile = file;
-
-        // Show image preview
         const reader = new FileReader();
         reader.onload = (e) => {
             uploadPreview.innerHTML = `<img src="${e.target.result}" alt="Uploaded Image Preview">`;
             dropZone.classList.add('file-loaded');
         };
         reader.readAsDataURL(file);
-
-        // Show search/remove buttons
         uploadControls.classList.remove('hidden');
+        setTimeout(() => {
+            uploadControls.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            setTimeout(() => {
+                consentBox.classList.add('highlight-attention');
+            }, 500); 
+            setTimeout(() => {
+                consentBox.classList.remove('highlight-attention');
+            }, 2000); 
+        }, 100); 
     }
 
     // --- Control Button Event Listeners ---
-
-    // Search button
     searchBtn.addEventListener('click', () => {
         if (currentFile) {
-            uploadControls.classList.add('hidden'); // Hide search/remove buttons
+            uploadControls.classList.add('hidden'); 
             uploadAndSearch(currentFile);
         }
     });
-
-    // Remove button
-    removeBtn.addEventListener('click', () => {
-        resetApp();
-    });
-
-    // Start Again button
-    startAgainBtn.addEventListener('click', () => {
-        resetApp();
-    });
-
+    removeBtn.addEventListener('click', () => { resetApp(); });
+    startAgainBtn.addEventListener('click', () => { resetApp(); });
     
-    // *** --- THIS IS THE UPDATED FUNCTION --- ***
+    // REFINED: Use classes for state
+    copyUuidBtn.addEventListener('click', () => {
+        const uuid = userUuid.textContent;
+        if (navigator.clipboard) {
+            navigator.clipboard.writeText(uuid).then(() => {
+                copyUuidBtn.textContent = 'Copied!';
+                copyUuidBtn.classList.add('copied');
+                setTimeout(() => {
+                    copyUuidBtn.textContent = 'Copy';
+                    copyUuidBtn.classList.remove('copied');
+                }, 2000);
+            }).catch(err => {
+                console.error('Failed to copy UUID: ', err);
+                alert('Failed to copy. Please copy manually.');
+            });
+        }
+    });
+
+    // --- Carousel Event Listeners ---
+    carouselNext.addEventListener('click', () => {
+        const maxIndex = Math.max(0, totalItems - itemsPerPage); 
+        if (currentIndex < maxIndex) {
+            currentIndex++; 
+            updateCarouselPosition();
+        }
+    });
+
+    carouselPrev.addEventListener('click', () => {
+        if (currentIndex > 0) {
+            currentIndex--; 
+            updateCarouselPosition();
+        }
+    });
+
+    // --- About Page CTA Listener ---
+    if (ctaTryNowBtn) {
+        ctaTryNowBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            const searchLink = document.querySelector('.nav-link[data-tab="search"]');
+            if (searchLink) searchLink.click();
+        });
+    }
+
+    // --- Privacy Link Listeners ---
+    function handlePrivacyLinkClick(e) {
+        e.preventDefault();
+        const aboutLink = document.querySelector('.nav-link[data-tab="about"]');
+        if (aboutLink) aboutLink.click();
+        setTimeout(() => {
+            const privacyBox = document.querySelector('.privacy-highlight-box');
+            if (privacyBox) {
+                privacyBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                privacyBox.classList.add('highlight-attention');
+                setTimeout(() => privacyBox.classList.remove('highlight-attention'), 2000);
+            }
+        }, 100);
+    }
+    if (consentPrivacyLink) {
+        consentPrivacyLink.addEventListener('click', handlePrivacyLinkClick);
+    }
+    
+    function handleManageDataLinkClick(e) {
+        e.preventDefault();
+        const manageDataLink = document.querySelector('.nav-link[data-tab="manage-data"]');
+        if (manageDataLink) manageDataLink.click();
+    }
+    if (aboutPrivacyLink) {
+        aboutPrivacyLink.addEventListener('click', handleManageDataLinkClick);
+    }
+
+    // --- Image Preloader Function ---
+    function preloadImages(urls) {
+        const promises = urls.map(url => {
+            return new Promise((resolve) => {
+                const img = new Image();
+                img.onload = () => resolve(img);
+                img.onerror = () => {
+                    console.error("Failed to preload image:", url);
+                    resolve(null); // Don't break Promise.all
+                };
+                img.src = url;
+            });
+        });
+        return Promise.all(promises);
+    }
+
+    // --- API Search Function ---
     async function uploadAndSearch(file) {
         console.log('Uploading file:', file.name);
 
-        // Show loader and results section
         resultsSection.classList.remove('hidden');
-        loader.classList.remove('hidden');
-        topResultContainer.classList.add('hidden'); // Hide top result elements
-        resultsGrid.innerHTML = ''; // Clear previous results
-        resetControls.classList.add('hidden'); // Hide start again button
+        resultsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        loader.classList.remove('hidden'); // Show loader
+        topResultContainer.classList.add('hidden');
+        carouselContainer.classList.add('hidden'); 
+        otherResultsTitle.classList.add('hidden'); 
+        carouselTrack.innerHTML = ''; 
+        resetControls.classList.add('hidden');
+        saveInfo.classList.add('hidden'); 
 
-        // Create a FormData object to send the file
         const formData = new FormData();
         formData.append("file", file);
+        formData.append("consent", consentCheckbox.checked); 
 
         try {
-            // Make the API call to your FastAPI backend
             const response = await fetch("/search/", {
                 method: "POST",
                 body: formData,
             });
-
             if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
+                const errData = await response.json();
+                throw new Error(errData.detail || `HTTP error! status: ${response.status}`);
             }
 
             const data = await response.json();
-            
-            // Display the results from the API
-            displayResults(data.results);
 
-            // Show the "Start Again" button
+            if (!data.results || data.results.length === 0) {
+                console.log("No results returned from API.");
+                displayResults([]); // Show "no results" message if configured
+                resetControls.classList.remove('hidden'); // Show "Start Again"
+                return;
+            }
+
+            const imageUrls = data.results.map(result => result.url);
+            console.log("Preloading images...", imageUrls);
+            await preloadImages(imageUrls);
+            console.log("All images preloaded.");
+
+            displayResults(data.results); 
+
+            if (data.uuid) {
+                saveInfo.classList.remove('hidden');
+                userUuid.textContent = data.uuid;
+            }
+
             resetControls.classList.remove('hidden');
 
         } catch (error) {
             console.error("Error during search:", error);
-            alert("Search failed. Could not connect to the backend. Please ensure it is running.");
+            alert(`Search failed: ${error.message}. Please ensure the backend is running.`);
+            resetControls.classList.remove('hidden'); 
         } finally {
-            // Hide the loader whether the search succeeds or fails
             loader.classList.add('hidden');
         }
     }
 
+    // --- Display Functions ---
     function displayResults(results) {
-        resultsGrid.innerHTML = ''; // Clear again just in case
+        carouselTrack.innerHTML = ''; 
 
-        // --- Handle Top Result ---
-        if (results.length > 0) {
-            const topResult = results[0];
-            topResultContainer.classList.remove('hidden');
-            topResultImageWrapper.innerHTML = `<img src="${topResult.url}" alt="Top Similar Image" data-fullsrc="${topResult.url}">`;
-            
-            // Animate and style the match percentage
-            animateCount(matchPercentageNumber, topResult.similarity, 1500); 
-            setMatchPercentageStyle(matchPercentageNumber, topResult.similarity);
-
-            // Make the top result image clickable
-            topResultImageWrapper.querySelector('img').addEventListener('click', () => {
-                openModal(topResult.url);
-            });
+        if (!results || results.length === 0) {
+            // Optional: Display a "No results found" message
+            otherResultsTitle.textContent = 'No matching results found.';
+            otherResultsTitle.classList.remove('hidden');
+            topResultContainer.classList.add('hidden');
+            carouselContainer.classList.add('hidden');
+            return;
         }
-
-        // --- Handle Other Results ---
-        // We only want the next 5 (since we requested top 6 and [0] is the top result)
-        const otherResults = results.slice(1, 6); 
         
-        for (const result of otherResults) {
+        // Ensure default title is set
+        otherResultsTitle.textContent = 'Other Similar Results';
+
+        const topResult = results[0];
+        topResultContainer.classList.remove('hidden');
+        topResultImageWrapper.innerHTML = `<img src="${topResult.url}" alt="Top Similar Image" data-fullsrc="${topResult.url}">`;
+        animateCount(matchPercentageNumber, topResult.similarity, 1000); 
+        setMatchPercentageStyle(matchPercentageNumber, topResult.similarity);
+        topResultImageWrapper.querySelector('img').addEventListener('click', () => {
+            openModal(topResult.url);
+        });
+
+        const otherResults = results.slice(1);
+        totalItems = otherResults.length;
+        currentIndex = 0; 
+
+        if (totalItems === 0) {
+            otherResultsTitle.classList.add('hidden');
+            carouselContainer.classList.add('hidden');
+            return;
+        }
+        
+        otherResultsTitle.classList.remove('hidden');
+        carouselContainer.classList.remove('hidden');
+        
+        otherResults.forEach(result => {
             const resultItem = document.createElement('div');
             resultItem.classList.add('result-item');
 
             const img = document.createElement('img');
             img.src = result.url;
             img.alt = 'Similar Image Result';
-            img.dataset.fullsrc = result.url; // Store full size URL
+            img.dataset.fullsrc = result.url; 
 
             const matchSpan = document.createElement('span');
             matchSpan.classList.add('result-match-small');
@@ -224,66 +369,110 @@ document.addEventListener('DOMContentLoaded', () => {
 
             resultItem.appendChild(img);
             resultItem.appendChild(matchSpan);
-            resultsGrid.appendChild(resultItem);
-
-            // Make other result images clickable
+            
             img.addEventListener('click', () => {
                 openModal(result.url);
             });
-        }
+            
+            carouselTrack.appendChild(resultItem);
+        });
+        
+        carouselTrack.style.width = null; 
+
+        updateCarouselPosition(); 
     }
 
-    // --- Match Percentage Animation & Styling ---
+    // --- Carousel Helper Functions ---
+    function updateCarouselPosition() {
+        // Ensure itemsPerPage is at least 1 to avoid division by zero
+        const safeItemsPerPage = Math.max(1, itemsPerPage);
+        const itemWidthPercent = 100 / safeItemsPerPage;
+        
+        // Clamp currentIndex to valid range
+        const maxIndex = Math.max(0, totalItems - safeItemsPerPage);
+        currentIndex = Math.max(0, Math.min(currentIndex, maxIndex));
+        
+        const newTransform = -currentIndex * itemWidthPercent;
+        carouselTrack.style.transform = `translateX(${newTransform}%)`;
+        updateCarouselControls();
+    }
+    
+    function updateCarouselControls() {
+        const maxIndex = Math.max(0, totalItems - itemsPerPage);
+        if (totalItems <= itemsPerPage) {
+            carouselPrev.classList.add('hidden');
+            carouselNext.classList.add('hidden');
+        } else {
+            carouselPrev.classList.toggle('hidden', currentIndex === 0);
+            carouselNext.classList.toggle('hidden', currentIndex >= maxIndex);
+        }
+    }
+    
     function animateCount(element, target, duration) {
         let start = 0;
-        let increment = target / (duration / 16); // ~60fps
-        let current = 0;
-        const timer = setInterval(() => {
-            current += increment;
-            if (current >= target) {
-                element.textContent = target;
-                clearInterval(timer);
+        const finalTarget = parseInt(target, 10) || 0;
+        const startTime = performance.now();
+
+        function step(currentTime) {
+            const elapsedTime = currentTime - startTime;
+            const progress = Math.min(elapsedTime / duration, 1);
+            
+            // Ease-out quad function: progress * (2 - progress)
+            const easedProgress = progress * (2 - progress);
+            
+            const current = Math.floor(easedProgress * finalTarget);
+            element.textContent = current;
+
+            if (progress < 1) {
+                requestAnimationFrame(step);
             } else {
-                element.textContent = Math.floor(current);
+                element.textContent = finalTarget;
             }
-        }, 16);
-    }
-
-    // Consolidated function for setting match percentage style
-    function setMatchPercentageStyle(element, percentage) {
-        // Remove existing color classes first
-        element.classList.remove('match-green', 'match-orange', 'match-red');
-
-        if (percentage > 80) {
-            element.classList.add('match-green');
-        } else if (percentage >= 50) {
-            element.classList.add('match-orange');
-        } else {
-            element.classList.add('match-red');
         }
+        requestAnimationFrame(step);
+    }
+    
+    function setMatchPercentageStyle(element, percentage) {
+        element.classList.remove('match-green', 'match-orange', 'match-red');
+        if (percentage > 80) element.classList.add('match-green');
+        else if (percentage >= 50) element.classList.add('match-orange');
+        else element.classList.add('match-red');
     }
 
     // --- Reset Function ---
     function resetApp() {
-        // Reset state
         currentFile = null;
-        fileInput.value = null; // Clear file input
-        
-        // Reset uploader UI
+        fileInput.value = null; 
         uploadPreview.innerHTML = '';
         dropZone.classList.remove('file-loaded');
+        dropZone.classList.remove('dragover');
         uploadControls.classList.add('hidden');
+        consentCheckbox.checked = false; 
         
-        // Hide results UI
         resultsSection.classList.add('hidden');
         topResultContainer.classList.add('hidden');
-        resultsGrid.innerHTML = '';
+        carouselContainer.classList.add('hidden');
+        otherResultsTitle.classList.add('hidden');
+        otherResultsTitle.textContent = 'Other Similar Results'; // Reset title
+        
+        carouselTrack.innerHTML = '';
+        carouselTrack.style.transform = 'translateX(0%)'; 
+        currentIndex = 0; 
+        totalItems = 0;
+        
         resetControls.classList.add('hidden');
         loader.classList.add('hidden');
+        saveInfo.classList.add('hidden'); 
+        userUuid.textContent = ''; 
         
-        // Reset match percentage display
+        copyUuidBtn.textContent = 'Copy';
+        copyUuidBtn.classList.remove('copied');
+        
         matchPercentageNumber.textContent = '0';
         matchPercentageNumber.classList.remove('match-green', 'match-orange', 'match-red');
+        
+        // Scroll to top
+        window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
     // --- Image Modal Functionality ---
@@ -291,31 +480,86 @@ document.addEventListener('DOMContentLoaded', () => {
         modalImage.src = imageSrc;
         imageModal.classList.add('active');
         imageModal.classList.remove('hidden');
-        document.body.style.overflow = 'hidden'; // Prevent scrolling background
+        document.body.style.overflow = 'hidden';
     }
-
     function closeModal() {
         imageModal.classList.add('hidden');
         imageModal.classList.remove('active');
-        modalImage.src = ''; // Clear the image source
-        document.body.style.overflow = ''; // Restore scrolling
+        modalImage.src = '';
+        document.body.style.overflow = '';
+    }
+    modalCloseBtn.addEventListener('click', closeModal);
+    imageModal.addEventListener('click', (e) => {
+        if (e.target === imageModal) closeModal();
+    });
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && imageModal.classList.contains('active')) closeModal();
+    });
+
+    // --- DELETE FORM LOGIC ---
+    if (deleteForm) {
+        deleteForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const uuid = uuidInput.value.trim();
+            if (!uuid) {
+                showDeleteMessage("Please enter a valid UUID.", "error");
+                return;
+            }
+
+            // Show loading state
+            deleteBtn.classList.add('loading');
+            deleteBtn.querySelector('.btn-text').classList.add('hidden');
+            deleteBtn.querySelector('.btn-loader').classList.remove('hidden');
+            deleteBtn.disabled = true;
+            deleteMessage.classList.add('hidden');
+
+            try {
+                const response = await fetch(`/delete/${uuid}`, {
+                    method: 'DELETE',
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    showDeleteMessage(data.message, 'success');
+                    uuidInput.value = ''; // Clear input on success
+                } else {
+                    throw new Error(data.detail || "An unknown error occurred.");
+                }
+
+            } catch (error) {
+                console.error("Error deleting file:", error);
+                showDeleteMessage(error.message, 'error');
+            } finally {
+                // Hide loading state
+                deleteBtn.classList.remove('loading');
+                deleteBtn.querySelector('.btn-text').classList.remove('hidden');
+                deleteBtn.querySelector('.btn-loader').classList.add('hidden');
+                deleteBtn.disabled = false;
+            }
+        });
     }
 
-    // Close modal when clicking the close button
-    modalCloseBtn.addEventListener('click', closeModal);
+    function showDeleteMessage(message, type) {
+        deleteMessage.textContent = message;
+        deleteMessage.classList.remove('hidden', 'success', 'error');
+        deleteMessage.classList.add(type); // 'success' or 'error'
+    }
 
-    // Close modal when clicking outside the image (on the overlay)
-    imageModal.addEventListener('click', (e) => {
-        if (e.target === imageModal) {
-            closeModal();
-        }
-    });
-
-    // Close modal with Escape key
-    document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape' && imageModal.classList.contains('active')) {
-            closeModal();
-        }
-    });
-
+    // --- Scroll Animations for About Page ---
+    const animatedElements = document.querySelectorAll('.animate-on-scroll');
+    if ("IntersectionObserver" in window) {
+        const observer = new IntersectionObserver((entries, obs) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add('is-visible');
+                    obs.unobserve(entry.target);
+                }
+            });
+        }, { threshold: 0.1 });
+        animatedElements.forEach(el => observer.observe(el));
+    } else {
+        // Fallback for older browsers
+        animatedElements.forEach(el => el.classList.add('is-visible'));
+    }
 });

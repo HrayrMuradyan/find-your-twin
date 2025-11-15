@@ -4,21 +4,24 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Visual Similarity Search</title>
-    <link rel="stylesheet" href="static/style.css">
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
+    
+    <link href='https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css' rel='stylesheet'>
+    
+    <link rel="stylesheet" href="/static/style.css">
+    
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
 
     <header class="navbar">
         <div class="container">
             <div class="navbar-brand">
-                <span class="logo-icon">🖼️</span>
-                <h1>ChromaSearch</h1>
+                <h1>Find Your Twin</h1>
             </div>
             <nav class="nav-links">
                 <ul>
                     <li><a href="#search" class="nav-link active" data-tab="search">Search</a></li>
-                    <li><a href="#info" class="nav-link" data-tab="info">Info</a></li>
+                    <li><a href="#manage-data" class="nav-link" data-tab="manage-data">Manage Data</a></li>
                     <li><a href="#about" class="nav-link" data-tab="about">About</a></li>
                 </ul>
             </nav>
@@ -28,26 +31,39 @@
     <main class="container">
         
         <section id="search-content" class="tab-content active">
+            
             <div class="hero-section">
-                <h2>Find Visually Similar Images</h2>
-                <p>Upload an image to query our FAISS-powered vector database and discover the most similar results from our collection.</p>
+                <h1 class="main-title">Find Your Visual Twin</h1>
+                <p class="main-subtitle">Upload an image to query our FAISS-powered vector database and discover the most similar results from our collection.</p>
             </div>
 
             <div id="upload-area">
                 <div id="drop-zone">
                     <div id="upload-preview"></div>
                     <div id="upload-instructions">
-                        <img src="https://img.icons8.com/pastel-glyph/64/008080/upload-to-cloud--v2.png" alt="Upload Icon" class="upload-icon">
-                        <p><strong>Drag & drop an image here</strong></p>
-                        <p class="small-text">or</p>
-                        <button type="button" id="browse-btn" class="btn">Browse Files</button>
+                        <div class="drop-zone-content">
+                            <i class='bx bx-cloud-upload upload-icon'></i>
+                            <p><strong>Drag & drop an image here</strong></p>
+                            <p class="small-text">or</p>
+                            <button type="button" id="browse-btn" class="btn">Browse Files</button>
+                        </div>
                     </div>
                     <input type="file" id="file-input" accept="image/*" hidden>
                 </div>
 
                 <div id="upload-controls" class="hidden">
-                    <button type="button" id="search-btn" class="btn">Search</button>
-                    <button type="button" id="remove-btn" class="btn btn-secondary">Remove</button>
+                    <div class="button-group">
+                        <button type="button" id="search-btn" class="btn btn-primary">Search</button>
+                        <button type="button" id="remove-btn" class="btn btn-secondary">Remove</button>
+                    </div>
+                    
+                    <div class="consent-box">
+                        <input type="checkbox" id="consent-checkbox">
+                        <label for="consent-checkbox">
+                            I consent to saving this image to improve search results.
+                            <a href="#privacy" id="consent-privacy-link">(Privacy Policy)</a>
+                        </label>
+                    </div>
                 </div>
             </div>
 
@@ -55,53 +71,162 @@
                 <h3>Search Results</h3>
                 <div id="loader" class="hidden">
                     <div class="spinner"></div>
-                    <p>Searching...</p>
+                    <p class="loader-text">Searching...</p>
                 </div>
 
                 <div id="top-result-container" class="hidden">
                     <div class="match-percentage-display">
                         <span id="match-percentage-number">0</span><span class="percentage-symbol">% Match</span>
                     </div>
-                    <div id="top-result-image-wrapper">
-                        </div>
+                    <div id="top-result-image-wrapper"></div>
                 </div>
-
-                <div id="results-grid">
+                <h4 class="other-results-title hidden">Other Similar Results</h4>
+                <div id="carousel-container" class="hidden">
+                    <button id="carousel-prev" class="carousel-btn hidden"><i class='bx bx-chevron-left'></i></button>
+                    <div class="carousel-wrapper">
+                        <div id="carousel-track">
+                            </div>
                     </div>
+                    <button id="carousel-next" class="carousel-btn hidden"><i class='bx bx-chevron-right'></i></button>
+                </div>
+                <div id="results-grid" class="hidden"></div>
                 
                 <div id="reset-controls" class="hidden">
                     <button type="button" id="start-again-btn" class="btn">Start Again</button>
+                    
+                    <div id="save-info" class="hidden">
+                        <p>Your image was saved. To request deletion, please save this ID:
+                            <span class="uuid-container">
+                                <code id="user-uuid"></code>
+                                <button type="button" id="copy-uuid-btn" class="btn btn-secondary btn-small">Copy</button>
+                            </span>
+                        </p>
+                    </div>
                 </div>
             </section>
         </section>
 
-        <section id="info-content" class="tab-content hidden">
-            <div class="info-box">
-                <h2>How It Works</h2>
-                <p>This tool demonstrates the power of vector similarity search.</p>
-                <ol>
-                    <li><strong>Upload:</strong> You provide an image.</li>
-                    <li><strong>Embedding:</strong> A deep learning model (like CLIP or ResNet) converts your image into a numerical vector (an "embedding") that captures its semantic meaning.</li>
-                    <li><strong>FAISS Search:</strong> We use **FAISS** (Facebook AI Similarity Search), a high-speed library, to compare your image's vector against millions of pre-indexed vectors in our database.</li>
-                    <li><strong>Results:</strong> The system returns the images whose vectors are "closest" to your query image in the high-dimensional space.</li>
-                </ol>
-                <p>This demo simulates the FAISS backend call. In a real application, the JavaScript frontend would send the image to a server (e.g., Python with Flask/FastAPI) which would then perform the embedding and FAISS query.</p>
+        <section id="manage-data-content" class="tab-content hidden">
+            <div class="info-box manage-data-container animate-on-scroll">
+                <h2>Manage Your Data</h2>
+                <p>We respect your "Right to be Forgotten." If you consented to save an image, you received a unique ID (UUID). You can use that ID to permanently delete your image from our database at any time.</p>
+
+                <div class="card delete-form-card">
+                    <h4>Delete Your Uploaded Image</h4>
+                    <p class="delete-form-subtext">Enter the UUID you saved after your search to permanently delete the corresponding image.</p>
+                    <form id="delete-form">
+                        <label for="uuid-input" class="form-label">Your Unique ID (UUID)</label>
+                        <input type="text" id="uuid-input" placeholder="e.g., f81d4fae-7dec-11d0-a765-00a0c91e6bf6" required>
+                        <button type="submit" id="delete-btn" class="btn btn-primary btn-delete">
+                            <span class="btn-text">Delete My Image</span>
+                            <span class="btn-loader hidden"></span>
+                        </button>
+                    </form>
+                    <div id="delete-message" class="delete-message hidden"></div>
+                </div>
+
+                <div class="how-it-works-deletion">
+                    <h3>How Deletion Works</h3>
+                    <ol class="modern-list">
+                        <li><span>1</span><div><strong>Submit ID:</strong> You provide the UUID you saved.</div></li>
+                        <li><span>2</span><div><strong>Find File:</strong> Our server finds the file on Google Drive associated with that specific ID.</div></li>
+                        <li><span>3</span><div><strong>Delete Vector:</strong> The image's vector is permanently removed from our FAISS search index.</div></li>
+                        <li><span>4</span><div><strong>Delete File:</strong> The original image file is permanently deleted from our Google Drive storage.</div></li>
+                    </ol>
+                    <p class="delete-form-subtext">This action is irreversible and removes all traces of your uploaded image from our system.</p>
+                </div>
             </div>
         </section>
 
         <section id="about-content" class="tab-content hidden">
-            <div class="info-box">
-                <h2>About This Project</h2>
-                <p>This is a conceptual demo for a visual search engine. The frontend is built with pure HTML, CSS, and JavaScript, while the (simulated) backend is designed to work with a powerful vector search library like FAISS.</p>
-                <p><strong>Stack:</strong></p>
-                <ul>
-                    <li><strong>Frontend:</strong> HTML5, CSS3 (Flexbox/Grid), JavaScript (ES6+)</li>
-                    <li><strong>Backend (Concept):</strong> Python, Flask/FastAPI, FAISS, PyTorch/TensorFlow (for embeddings)</li>
-                </ul>
-            </div>
-        </section>
+            <div class="info-box about-page-container">
+                
+                <div class="about-hero">
+                    <div class="about-hero-icon">🖼️</div>
+                    <h2>About This Project</h2>
+                    <p>A high-performance visual search engine to find your twin, built with modern AI and a high-speed vector index.</p>
+                    <button id="cta-try-now" class="btn btn-primary">Try it Now</button>
+                </div>
 
-    </main>
+                <section class="about-section about-section-colored">
+                    <h3 class="about-section-title animate-on-scroll">How It Works</h3>
+                    
+                    <div class="how-it-works-grid">
+                        <ol class="modern-list">
+                            <li class="animate-on-scroll"><span>1</span><div><strong>Upload & Resize:</strong> You upload an image, which is instantly resized to 1280px for fast processing.</div></li>
+                            <li class="animate-on-scroll"><span>2</span><div><strong>Face Detection:</strong> A MediaPipe model scans the image to find and extract the primary face.</div></li>
+                            <li class="animate-on-scroll"><span>3</span><div><strong>Embedding:</strong> The DeepFace model converts the cropped face into a 512-dimension vector (an "embedding").</div></li>
+                            <li class="animate-on-scroll"><span>4</span><div><strong>FAISS Search:</strong> This new vector is queried against a FAISS index containing millions of pre-computed vectors.</div></li>
+                            <li class="animate-on-scroll"><span>5</span><div><strong>Results:</strong> The system finds the closest vectors in the database and returns the corresponding images.</div></li>
+                        </ol>
+                        
+                        <div class="how-it-works-visual animate-on-scroll">
+                            </div>
+                    </div>
+                </section>
+                <section class="about-section about-section-white">
+                    <h3 class="about-section-title animate-on-scroll">Privacy First</h3>
+                    <div class="privacy-highlight-box animate-on-scroll">
+                        <p>Your trust is our priority. We handle your data with care:</p>
+                        <ul>
+                            <li>Your uploaded image is processed in memory and never saved, unless you give explicit consent.</li>
+                            <li>No personal information (like your IP address) is saved alongside with your image.</li>
+                            <li>Consented images are stored on secure Google Drive servers with no outside permission.</li>
+                            <li>Any image uploaded to the website can be deleted using a unique identifier UUID which is assigned after you do search. <a href="#" class="about-privacy-link">Learn more here.</a></li>
+                        </ul>
+                    </div>
+                </section>
+                <section class="about-section about-section-colored">
+                    <h3 class="about-section-title animate-on-scroll">Technology Stack</h3>
+                    <div class="tech-stack-grid">
+                        <div class="card animate-on-scroll">
+                            <h4>Frontend</h4>
+                            <ul>
+                                <li><strong>HTML5:</strong> Semantic page structure.</li>
+                                <li><strong>CSS3:</strong> Modern, responsive layouts.</li>
+                                <li><strong>JavaScript (ES6+):</strong> Client-side interactivity.</li>
+                            </ul>
+                        </div>
+                        <div class="card animate-on-scroll">
+                            <h4>Backend &amp; AI</h4>
+                            <ul>
+                                <li><strong>Python 3:</strong> Core server language.</li>
+                                <li><strong>FastAPI:</strong> High-performance API.</li>
+                                <li><strong>FAISS:</strong> Vector similarity search.</li>
+                                <li><strong>DeepFace:</strong> Facial embedding model.</li>
+                                <li><strong>Google Drive API:</strong> Image storage.</li>
+                            </ul>
+                        </div>
+                    </div>
+                </section>
+                <section class="about-section about-section-white">
+                    <h3 class="about-section-title animate-on-scroll">Meet the Developer</h3>
+                    <div class="developer-card animate-on-scroll">
+                        <div class="developer-img-placeholder">
+                            <span>HM</span> </div>
+                        <div class="developer-info">
+                            <h4>Hrayr Muradyan</h4>
+                            <p>Full-Stack Developer & AI Enthusiast</p>
+                            <div class="social-links">
+                                <a href="#" class="social-icon-link" title="GitHub">
+                                    <img src="https://img.icons8.com/material-outlined/48/000000/github.png" alt="GitHub"/>
+                                </a>
+                                <a href="#" class="social-icon-link" title="LinkedIn">
+                                    <img src="https://img.icons8.com/material-outlined/48/000000/linkedin.png" alt="LinkedIn"/>
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="about-footer">
+                        <p class="personal-signature">
+                            Built with &copy; 2025
+                        </p>
+                    </div>
+                </section>
+                </div>
+        </section>
+        </main>
 
     <section class="carousel-section">
         <h3>Example Dataset Images</h3>
@@ -121,7 +246,7 @@
                 <img src="https://images.unsplash.com/photo-1500648767791-00dcc994a43e?ixlib=rb-1.2.1&q=80&fm=jpg&crop=faces&fit=crop&h=200&w=200" alt="Face">
                 <img src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?ixlib=rb-1.2.1&q=80&fm=jpg&crop=faces&fit=crop&h=200&w=200" alt="Face">
                 <img src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?ixlib=rb-1.2.1&q=80&fm=jpg&crop=faces&fit=crop&h=200&w=200" alt="Face">
-                <img src="httpss://images.unsplash.com/photo-1521119989659-a83eee488004?ixlib=rb-1.2.1&q=80&fm=jpg&crop=faces&fit=crop&h=200&w=200" alt="Face">
+                <img src="https://images.unsplash.com/photo-1521119989659-a83eee488004?ixlib=rb-1.2.1&q=80&fm=jpg&crop=faces&fit=crop&h=200&w=200" alt="Face">
                 <img src="https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?ixlib=rb-1.2.1&q=80&fm=jpg&crop=faces&fit=crop&h=200&w=200" alt="Face">
             </div>
         </div>
@@ -130,12 +255,12 @@
     <footer class="footer">
         <p>&copy; 2025 Visual Search Demo. All rights reserved.</p>
     </footer>
-
+    
     <div id="image-modal" class="modal hidden">
         <span class="modal-close-btn">&times;</span>
         <img class="modal-content" id="modal-image" src="" alt="Large Image">
     </div>
     
-    <script src="static/script.js"></script>
+    <script src="/static/script.js"></script>
 </body>
 </html>
