@@ -109,11 +109,14 @@
         <section id="manage-data-content" class="tab-content hidden">
             <div class="info-box manage-data-container animate-on-scroll">
                 <h2>Manage Your Data</h2>
-                <p>We respect your "Right to be Forgotten." If you consented to save an image, you received a unique ID (UUID). You can use that ID to permanently delete your image from our database at any time.</p>
+                <p>The app respects your Right to be Forgotten. After you hit the "Search" button and provide consent, the app creates a unique ID (UUID) for your uploaded image. You can use this ID at any time to permanently delete your image from the app's database.</p>
 
                 <div class="card delete-form-card">
                     <h4>Delete Your Uploaded Image</h4>
                     <p class="delete-form-subtext">Enter the UUID you saved after your search to permanently delete the corresponding image.</p>
+                    
+                    <p class="delete-form-subtext" style="color: var(--match-orange); font-weight: 500;"><strong>Note:</strong> Don't share your UUID with others, as they will be able to remove your image with that ID.</p>
+                    
                     <form id="delete-form">
                         <label for="uuid-input" class="form-label">Your Unique ID (UUID)</label>
                         <input type="text" id="uuid-input" placeholder="e.g., f81d4fae-7dec-11d0-a765-00a0c91e6bf6" required>
@@ -135,6 +138,12 @@
                     </ol>
                     <p class="delete-form-subtext">This action is irreversible and removes all traces of your uploaded image from our system.</p>
                 </div>
+                
+                <div class="card" style="margin-top: 2.5rem; text-align: left;">
+                    <h4 style="font-size: 1.2rem; color: var(--text-color); margin-bottom: 0.75rem;">Forgot Your ID?</h4>
+                    <p class="delete-form-subtext" style="margin-bottom: 0;">If you forgot to save your ID but still wish to have your image removed, please contact the developer at: <a href="mailto:hrayrmuradyan20@gmail.com" style="color: var(--primary-color); font-weight: 500; text-decoration: none;">hrayrmuradyan20@gmail.com</a></p>
+                </div>
+
             </div>
         </section>
 

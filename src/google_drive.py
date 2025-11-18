@@ -10,7 +10,16 @@ from googleapiclient.http import MediaFileUpload, MediaIoBaseDownload, MediaIoBa
 from dotenv import load_dotenv
 import io
 import base64
+import logging
+logger = logging.getLogger(__name__)
 
+import sys
+from pathlib import Path
+script_dir = Path(__file__).parent
+root_dir = script_dir.parent
+sys.path.append(str(root_dir))
+
+from src.utils import blur_str
 
 load_dotenv()
 
@@ -31,24 +40,29 @@ def get_drive_service():
     # If there are no (valid) credentials available, let the user log in.
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
-            print("Refreshing expired credentials...")
+            logger.info("Refreshing expired credentials of Google Drive API...")
             try:
                 creds.refresh(Request())
+                logger.info("Successfuly refreshed the expired credentials of Google Drive API. Ready to use.")
             except Exception as e:
-                print(f"Error refreshing token: {e}")
-                print("Could not refresh token. Please re-authenticate.")
+                logger.exception("Error refreshing token: %s", e)
+                logger.exception("Could not refresh token. Please re-authenticate.")
                 os.remove(TOKEN_FILE_PATH) 
                 creds = None 
         
         # If no valid token, run the auth flow
         if not creds:
             if not os.path.exists(CLIENT_SECRET_FILE_PATH):
-                print(f"CRITICAL ERROR: '{CLIENT_SECRET_FILE_PATH}' not found.")
-                print("Please download it from your Google Cloud project's")
-                print("OAuth 2.0 Credentials page and place it in this directory.")
+                logging.error("Secret file path not found: %s", CLIENT_SECRET_FILE_PATH)
+                logging.error("Please download it from your Google Cloud project's")
+                logging.error("OAuth 2.0 Credentials page and place it in this directory.")
                 return None
             
-            print(f"'{TOKEN_FILE_PATH}' not found or invalid, starting new auth flow...")
+            logging.error(
+                "Token not found at %s not found or invalid, starting new auth flow...",
+                TOKEN_FILE_PATH
+            )
+            
             flow = InstalledAppFlow.from_client_secrets_file(
                 CLIENT_SECRET_FILE_PATH, SCOPES)
             creds = flow.run_local_server(port=0)
@@ -56,17 +70,17 @@ def get_drive_service():
         # Save the credentials for the next run
         with open(TOKEN_FILE_PATH, 'w') as token:
             token.write(creds.to_json())
-            print(f"Credentials saved to '{TOKEN_FILE_PATH}'")
+            logging.info("Credentials saved to %s", TOKEN_FILE_PATH)
 
     try:
         service = build('drive', 'v3', credentials=creds)
-        print("Google Drive service created successfully.")
+        logging.info("Google Drive service created successfully.")
         return service
     except HttpError as error:
-        print(f"An error occurred building the service: {error}")
+        logging.exception("An error occurred building the service: %s", error)
         return None
     except Exception as e:
-        print(f"An unexpected error occurred: {e}")
+        logging.exception("An unexpected error occurred: %s", e)
         return None
     
 
@@ -75,7 +89,7 @@ def list_all_files(service, page_size=100):
     Lists all files in the user's Google Drive.
     """
     if service is None:
-        print("Drive service not initialized.")
+        logging.warning("Drive service not initialized.")
         return []
 
     files = []
@@ -95,7 +109,7 @@ def list_all_files(service, page_size=100):
             if not page_token:
                 break
         except Exception as e:
-            print(f"Error listing files: {e}")
+            logger.exception("Error listing files: %s", e)
             break
 
     return files
@@ -120,24 +134,32 @@ def get_or_create_app_folder(service):
         files = response.get('files', [])
 
         if files:
-            # Folder found
             folder_id = files[0].get('id')
-            print(f"Found existing app folder: '{folder_name}' (ID: {folder_id})")
+            logging.info(
+                "Found an existing app folder: %s (ID: %s)",
+                folder_name,
+                folder_id
+            )
+
             return folder_id
         else:
             # Folder not found, create it
-            print(f"App folder '{folder_name}' not found. Creating it...")
+            logging.info("App folder %s not found. Creating it...", folder_name)
             file_metadata = {
                 'name': folder_name,
                 'mimeType': 'application/vnd.google-apps.folder'
             }
             folder = service.files().create(body=file_metadata, fields='id').execute()
             folder_id = folder.get('id')
-            print(f"Successfully created app folder: '{folder_name}' (ID: {folder_id})")
+            logging.info(
+                "Successfully created app folder: %s (ID: %s)",
+                folder_name,
+                folder_id
+            )
             return folder_id
 
     except HttpError as error:
-        print(f"An error occurred searching for or creating the folder: {error}")
+        logging.exception("An error occurred searching for or creating the folder: %s", error)
         return None
     
 
@@ -148,11 +170,11 @@ def upload_file_to_folder(service, folder_id, local_file_path, uuid=None):
     optionally adding a custom UUID to its appProperties.
     """
     if not service or not folder_id:
-        print("Service or folder_id is missing, cannot upload.")
+        logging.warning("Service or folder_id is missing, cannot upload.")
         return None
     
     if not os.path.exists(local_file_path):
-        print(f"Local file not found: {local_file_path}")
+        logging.warning("Local file not found: %s", local_file_path)
         return None
 
     try:
@@ -161,32 +183,38 @@ def upload_file_to_folder(service, folder_id, local_file_path, uuid=None):
         
         file_metadata = {
             'name': file_name,
-            'parents': [folder_id]  # This is crucial for putting it *in* the folder
+            'parents': [folder_id]
         }
         
         if uuid:
-            print(f"Adding custom UUID to appProperties: {uuid}")
+            logging.info(
+                "Adding custom UUID to appProperties: %s",
+                blur_str(uuid)
+            )
             file_metadata['appProperties'] = {
-                'uuid': str(uuid)  # Store the UUID as a string
+                'uuid': str(uuid) 
             }
         
         media = MediaFileUpload(local_file_path, mimetype=mime_type)
         
-        print(f"Uploading '{file_name}' to Drive folder...")
+        logging.info("Uploading %s to Drive folder...", blur_str(file_name))
         
         file = service.files().create(
             body=file_metadata,
             media_body=media,
-            fields='id, name, appProperties' # <-- Request appProperties back
+            fields='id, name, appProperties'
         ).execute()
         
-        print(f"File uploaded successfully: '{file.get('name')}' (ID: {file.get('id')})")
-        if file.get('appProperties'):
-            print(f"  -> with appProperties: {file.get('appProperties')}")
+        logging.info(
+            "File uploaded successfully: %s (ID: %s)",
+            blur_str(file.get('name')),
+            file.get('id')
+        )
+
         return file.get('id')
 
     except HttpError as error:
-        print(f"An error occurred uploading the file: {error}")
+        logging.exception("An error occurred uploading the file: %s", error)
         return None
     
 def upload_bytes_to_folder(service, folder_id, file_name, file_bytes, mime_type, uuid_str=None):
@@ -194,7 +222,7 @@ def upload_bytes_to_folder(service, folder_id, file_name, file_bytes, mime_type,
     Uploads raw bytes to the specified Google Drive folder.
     """
     if not service or not folder_id:
-        print("Service or folder_id is missing, cannot upload.")
+        logging.warning("Service or folder_id is missing, cannot upload.")
         return None
 
     try:
@@ -216,7 +244,7 @@ def upload_bytes_to_folder(service, folder_id, file_name, file_bytes, mime_type,
             resumable=True
         )
         
-        print(f"Uploading '{file_name}' (from memory) to Drive folder...")
+        logging.info("Uploading %s (from memory) to Drive folder...", blur_str(file_name))
         
         file = service.files().create(
             body=file_metadata,
@@ -224,11 +252,16 @@ def upload_bytes_to_folder(service, folder_id, file_name, file_bytes, mime_type,
             fields='id, name'
         ).execute()
         
-        print(f"File uploaded successfully: '{file.get('name')}' (ID: {file.get('id')})")
+        logging.info(
+            "File uploaded successfully: %s (ID: %s)",
+            blur_str(file.get('name')),
+            file.get('id')
+        )
+
         return file.get('id')
 
     except HttpError as error:
-        print(f"An error occurred uploading the file from bytes: {error}")
+        logging.exception("An error occurred uploading the file from bytes: %s", error)
         return None
     
 
@@ -238,10 +271,10 @@ def get_image_bytes_by_id(service, file_id):
     and returns its raw bytes.
     """
     if not service:
-        print("Service is missing, cannot download.")
+        logging.warning("Service is missing, cannot download.")
         return None
         
-    print(f"Attempting to download file ID: {file_id} into memory...")
+    logging.info("Attempting to download file ID: %s into memory...", file_id)
     
     try:
         # Request the media content of the file
@@ -255,24 +288,24 @@ def get_image_bytes_by_id(service, file_id):
         done = False
         while done is False:
             status, done = downloader.next_chunk()
-            print(f"Download to memory {int(status.progress() * 100)}%.")
+            logging.info("Download to memory %s%.", int(status.progress() * 100))
         
-        print(f"File downloaded successfully to memory.")
+        logging.info("File downloaded successfully to memory.")
         
         # Go to the beginning of the buffer and get its value
         fh.seek(0)
         return fh.getvalue()
         
     except HttpError as error:
-        print(f"An error occurred downloading the file: {error}")
+        logging.exception("An error occurred downloading the file: %s", error)
         if error.resp.status == 404:
-            print("Error: File not found. Check the file ID.")
+            logging.error("Error: File not found. Check the file ID.")
         elif error.resp.status == 403:
-             print("Error: Permission denied. Does your app have access to this specific file?")
-             print("With 'drive.file' scope, your app can only access files it created.")
+             logging.error("Error: Permission denied. Does your app have access to this specific file?")
+             logging.error("With 'drive.file' scope, your app can only access files it created.")
         return None
     except Exception as e:
-        print(f"An unexpected error occurred: {e}")
+        logging.exception("An unexpected error occurred: %s", e)
         return None
 
 def get_image_base64_by_id(service, file_id, mime_type="image/jpeg"):
@@ -283,16 +316,16 @@ def get_image_base64_by_id(service, file_id, mime_type="image/jpeg"):
     image_bytes = get_image_bytes_by_id(service, file_id)
     
     if image_bytes:
-        print("Encoding image bytes to Base64...")
+        logging.info("Encoding image bytes to Base64...")
         # Encode the raw bytes into a Base64 string
         base64_string = base64.b64encode(image_bytes).decode('utf-8')
         
         # Format as a data URI
         data_uri = f"data:{mime_type};base64,{base64_string}"
-        print("Successfully created Base64 data URI.")
+        logging.info("Successfully created Base64 data URI.")
         return data_uri
     else:
-        print("Could not get image bytes, returning None.")
+        logging.warning("Could not get image bytes, returning None.")
         return None
     
 
@@ -302,11 +335,11 @@ def get_file_by_uuid(service, uuid):
     Note: This search is private to your app.
     """
     if not service:
-        print("Service is missing, cannot search.")
+        logging.warning("Service is missing, cannot search.")
         return None
         
     if not uuid:
-        print("UUID is missing, cannot search.")
+        logging.warning("UUID is missing, cannot search.")
         return None
 
     try:
@@ -314,28 +347,27 @@ def get_file_by_uuid(service, uuid):
         # inside the query string.
         query = f"appProperties has {{ key='uuid' and value='{uuid}' }} and trashed=false"
         
-        print(f"Searching for file with UUID: {uuid}...")
+        logging.info("Searching for file with UUID: %s...", blur_str(uuid))
         
         response = service.files().list(
             q=query,
             spaces='drive',
-            fields='files(id, name, appProperties)',  # Get all relevant fields
-            pageSize=1  # We only expect one, so limit to 1
+            fields='files(id, name, appProperties)',  
+            pageSize=1  
         ).execute()
         
         files = response.get('files', [])
         
         if files:
             found_file = files[0]
-            print(f"Found file: '{found_file.get('name')}' (ID: {found_file.get('id')})")
-            print(f"  -> with appProperties: {found_file.get('appProperties')}")
+            logging.info("Found file: %s (ID: %s)", blur_str(found_file.get('name')), found_file.get('id'))
             return found_file
         else:
-            print(f"No file found with UUID: {uuid}")
+            logging.warning("No file found with UUID: %s", blur_str(uuid))
             return None
 
     except HttpError as error:
-        print(f"An error occurred while searching by UUID: {error}")
+        logging.exception("An error occurred while searching by UUID: %s", error)
         return None
     
 
@@ -345,40 +377,40 @@ def delete_file_by_uuid(service, uuid_str):
     Returns True if deleted, False otherwise.
     """
     if not service:
-        print("Service is missing, cannot delete.")
+        logging.warning("Service is missing, cannot delete.")
         return False
 
     if not uuid_str:
-        print("UUID is missing, cannot delete.")
+        logging.warning("UUID is missing, cannot delete.")
         return False
 
     # Reuse your existing search helper
     file_info = get_file_by_uuid(service, uuid_str)
 
     if not file_info:
-        print(f"No file found with UUID: {uuid_str}")
+        logging.warning("No file found with UUID: %s", blur_str(uuid_str))
         return False
 
     file_id = file_info.get("id")
     file_name = file_info.get("name")
 
     try:
-        print(f"Deleting file '{file_name}' (ID: {file_id}) ...")
+        logging.info("Deleting file '%s' (ID: %s) ...", file_name, file_id)
 
         service.files().delete(fileId=file_id).execute()
 
-        print(f"Successfully deleted file '{file_name}' (UUID={uuid_str}).")
+        logging.info("Successfully deleted file '%s' (UUID=%s).", file_name, blur_str(uuid_str))
         return True
 
     except HttpError as error:
-        print(f"An error occurred deleting the file: {error}")
+        logging.exception("An error occurred deleting the file: %s", error)
         if error.resp.status == 404:
-            print("Error: File already deleted or not found.")
+            logging.exception("Error: File already deleted or not found.")
         elif error.resp.status == 403:
-            print("Error: Permission denied. Your app may not own this file.")
+            logging.exception("Error: Permission denied. Your app may not own this file.")
         return False
     except Exception as e:
-        print(f"Unexpected error while deleting: {e}")
+        logging.exception("Unexpected error while deleting: %s", e)
         return False
 
 def delete_file_by_id(service, file_id):
@@ -387,26 +419,27 @@ def delete_file_by_id(service, file_id):
     Returns True if deleted, False otherwise.
     """
     if not service:
-        print("Service is missing, cannot delete.")
+        logging.warning("Service is missing, cannot delete.")
         return False
 
     if not file_id:
-        print("File ID is missing, cannot delete.")
+        logging.warning("File ID is missing, cannot delete.")
         return False
 
     try:
+        logging.info("Trying deleting file with ID = %s", file_id)
         service.files().delete(fileId=file_id).execute()
 
         return True
 
     except HttpError as error:
-        print(f"An error occurred deleting the file: {error}")
+        logging.exception("An error occurred deleting the file: %s", error)
         if error.resp.status == 404:
-            print("Error: File not found or already deleted.")
+            logging.exception("Error: File not found or already deleted.")
         elif error.resp.status == 403:
-            print("Error: Permission denied. Your app may not own this file.")
+            logging.exception("Error: Permission denied. Your app may not own this file.")
         return False
 
     except Exception as e:
-        print(f"Unexpected error while deleting: {e}")
+        logging.exception("Unexpected error while deleting: %s", e)
         return False

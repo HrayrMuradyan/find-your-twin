@@ -4,7 +4,8 @@ import numpy as np
 from deepface import DeepFace
 from src.image import read_image
 from deepface.modules import preprocessing
-
+import logging
+logger = logging.getLogger(__name__)
 
 class DeepFaceEmbedder:
     """
@@ -43,9 +44,12 @@ class DeepFaceEmbedder:
 
     def _load_model(self, model_name: str):
         """Loads and returns the specified DeepFace model."""
-        print(f"[INFO] Loading DeepFace model: {model_name} ...")
-        model = DeepFace.build_model(model_name)
-        print(f"[INFO] Model '{model_name}' loaded successfully.")
+        try:
+            logging.info("Loading DeepFace model: %s", model_name)
+            model = DeepFace.build_model(model_name)
+            logging.info(f"DeepFace Embedding Model '%s' loaded successfully", model_name)
+        except Exception as e:
+            logging.exception("There was an error building DeepFace embedding model with name '%s'", model_name)
         return model
 
     def compute_embeddings(self, img: Union[str, Path, np.ndarray]) -> Optional[np.ndarray]:
@@ -100,7 +104,7 @@ class DeepFaceEmbedder:
             return normalized_embedding.astype(np.float32)
 
         except Exception as e:
-            print(f"[WARN] Failed to compute embedding: {e}")
+            logging.warning("Failed to compute embedding: %s", e)
             return None
 
     def __repr__(self):

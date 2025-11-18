@@ -14,7 +14,7 @@ def read_model_config(model_path):
     then reads and returns the JSON content as a dictionary.
 
     Args:
-        model_path (str): Path to the model directory containing `config.json`.
+        model_path (str or Path): Path to the model directory containing `config.json`.
 
     Raises:
         TypeError: If `model_path` is not a string.
@@ -23,8 +23,8 @@ def read_model_config(model_path):
     Returns:
         dict: The contents of the model's `config.json` file.
     """
-    if not isinstance(model_path, str):
-        raise TypeError(f"model_path argument should be a string. You have {type(model_path)}")
+    if not isinstance(model_path, (str, Path)):
+        raise TypeError(f"model_path argument should be a string or a Path object. You have {type(model_path)}")
 
     model_path = Path(model_path)
     model_config_file_path = model_path / "config.json"
