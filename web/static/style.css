@@ -444,8 +444,9 @@ body {
     box-shadow: var(--shadow-small);
 }
 .info-box h2 {
-    color: var(--primary-color); margin-bottom: 1rem;
-    border-bottom: 2px solid var(--primary-light); padding-bottom: 0.5rem;
+    color: var(--primary-color);
+    margin-bottom: 1rem;
+    padding-bottom: 0.5rem;
 }
 .info-box p, .info-box li { margin-bottom: 1rem; line-height: 1.7; }
 .info-box ol, .info-box ul { padding-left: 1.25rem; }
@@ -517,7 +518,7 @@ body {
 .how-it-works-visual {
     width: 100%; min-height: 300px; height: 100%;
     border-radius: var(--border-radius);
-    background-image: url('https://images.unsplash.com/photo-1534528741775-53994a69daeb?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3wzNjAzNTV8MHwxfGFsbHx8fHx8fHx8fDE3MzE2MDc1MDF8&ixlib=rb-4.0.3&q=80&w=1080');
+    background-image: url("./imgs/banner2.png");
     background-size: cover; background-position: center;
     box-shadow: var(--shadow-medium);
 }
