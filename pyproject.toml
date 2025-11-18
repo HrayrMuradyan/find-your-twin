@@ -1,0 +1,2 @@
+[tool.find_your_twin]
+config_path = "configs/main.yaml"

@@ -1,0 +1,29 @@
+app:
+  title: "Visual Search API"
+  paths:
+    static: "web/static"
+    data: "data"
+    index_html: "web/index.html" 
+  base_url: "http://127.0.0.1:8000"
+
+models:
+  paths:
+    face_detect_model: "models/face_detect/mediapipe"
+    embeddings_model: "models/embeddings/deepface"
+
+faiss:
+  paths:
+    index_path: "embeddings_store"
+
+
+image:
+  max_size: 1280
+
+search:
+  retrieval_similarity_threshold: 30
+  min_other_images: 5
+  k_to_search: 21
+  save_similarity_threshold: 95
+
+
+
