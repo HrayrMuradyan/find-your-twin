@@ -24,3 +24,9 @@ def import_attr(module_name: str, attr_name: str):
         return getattr(module, attr_name)
     except AttributeError as e:
         raise AttributeError(f"Module '{module_name}' has no attribute '{attr_name}'") from e
+    
+
+def blur_str(input_str, perc=0.8):
+    input_len = len(input_str)
+    threshold = int(input_len*(1-perc))
+    return input_str[:threshold] + "*"*int(input_len-threshold)

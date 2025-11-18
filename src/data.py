@@ -39,18 +39,6 @@ def get_all_data(
         - For each metadata key `k` in `metadata_to_keep`, there is a corresponding
           list stored under the key `"source_{k}"`.
 
-    Raises
-    ------
-    TypeError
-        If `main_data_folder` is not a string or Path object.
-
-    ValueError
-        If the folder does not exist or is not a directory.
-
-    Notes
-    -----
-    - Folders missing either `images/` or `source_info.json` will be skipped.
-    - Missing metadata keys in `source_info.json` will be recorded as None.
     """
     
     # Validate folder type
