@@ -1,8 +1,8 @@
 app:
   title: "Visual Search API"
   paths:
-    static: "web/static"
-    index_html: "web/index.html" 
+    static: "docs/static"
+    index_html: "docs/index.html" 
   base_url: "http://127.0.0.1:8000"
 
 models:
