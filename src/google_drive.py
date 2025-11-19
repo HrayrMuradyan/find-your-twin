@@ -1,5 +1,4 @@
 import os
-import os.path
 import mimetypes
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
@@ -13,18 +12,18 @@ import base64
 import logging
 logger = logging.getLogger(__name__)
 
-import sys
 from pathlib import Path
+import sys
 script_dir = Path(__file__).parent
-root_dir = script_dir.parent
-sys.path.append(str(root_dir))
+PROJECT_ROOT = script_dir.parent
+sys.path.append(str(PROJECT_ROOT))
 
 from src.utils import blur_str
 
 load_dotenv()
 
-CLIENT_SECRET_FILE_PATH = os.getenv("GOOGLE_CLIENT_SECRET_PATH")
-TOKEN_FILE_PATH = os.getenv("GOOGLE_TOKEN_PATH")
+CLIENT_SECRET_FILE_PATH = PROJECT_ROOT / os.getenv("GOOGLE_CLIENT_SECRET_PATH")
+TOKEN_FILE_PATH = PROJECT_ROOT / os.getenv("GOOGLE_TOKEN_PATH")
 SCOPES = ['https://www.googleapis.com/auth/drive.file']
 APP_FOLDER_NAME = "face-similarity"
 
@@ -34,7 +33,7 @@ def get_drive_service():
     """
     creds = None
     # Check if the token file exists
-    if os.path.exists(TOKEN_FILE_PATH):
+    if TOKEN_FILE_PATH.exists():
         creds = Credentials.from_authorized_user_file(TOKEN_FILE_PATH, SCOPES)
 
     # If there are no (valid) credentials available, let the user log in.
@@ -44,27 +43,31 @@ def get_drive_service():
             try:
                 creds.refresh(Request())
                 logger.info("Successfuly refreshed the expired credentials of Google Drive API. Ready to use.")
+
             except Exception as e:
                 logger.exception("Error refreshing token: %s", e)
                 logger.exception("Could not refresh token. Please re-authenticate.")
-                os.remove(TOKEN_FILE_PATH) 
+                TOKEN_FILE_PATH.unlink()
                 creds = None 
         
         # If no valid token, run the auth flow
         if not creds:
-            if not os.path.exists(CLIENT_SECRET_FILE_PATH):
-                logging.error("Secret file path not found: %s", CLIENT_SECRET_FILE_PATH)
+            if not CLIENT_SECRET_FILE_PATH.exists():
+                logging.error(
+                    "Secret file path not found: %s",
+                    str(CLIENT_SECRET_FILE_PATH)
+                )
                 logging.error("Please download it from your Google Cloud project's")
                 logging.error("OAuth 2.0 Credentials page and place it in this directory.")
                 return None
             
             logging.error(
                 "Token not found at %s not found or invalid, starting new auth flow...",
-                TOKEN_FILE_PATH
+                str(TOKEN_FILE_PATH)
             )
             
             flow = InstalledAppFlow.from_client_secrets_file(
-                CLIENT_SECRET_FILE_PATH, SCOPES)
+                str(CLIENT_SECRET_FILE_PATH), SCOPES)
             creds = flow.run_local_server(port=0)
 
         # Save the credentials for the next run
@@ -122,14 +125,12 @@ def get_or_create_app_folder(service):
     """
     if not service:
         return None
-
-    folder_name = APP_FOLDER_NAME
     
     try:
         # Search for the folder
         # 'q' is the query string. We're looking for a folder with our app's name.
-        # The `drive.file` scope means we can *only* find folders this app has created.
-        query = f"mimeType='application/vnd.google-apps.folder' and name='{folder_name}' and trashed=false"
+        # The `drive.file` scope means we can only find folders this app has created.
+        query = f"mimeType='application/vnd.google-apps.folder' and name='{APP_FOLDER_NAME}' and trashed=false"
         response = service.files().list(q=query, spaces='drive', fields='files(id, name)').execute()
         files = response.get('files', [])
 
@@ -137,23 +138,23 @@ def get_or_create_app_folder(service):
             folder_id = files[0].get('id')
             logging.info(
                 "Found an existing app folder: %s (ID: %s)",
-                folder_name,
+                APP_FOLDER_NAME,
                 folder_id
             )
 
             return folder_id
         else:
             # Folder not found, create it
-            logging.info("App folder %s not found. Creating it...", folder_name)
+            logging.info("App folder %s not found. Creating it...", APP_FOLDER_NAME)
             file_metadata = {
-                'name': folder_name,
+                'name': APP_FOLDER_NAME,
                 'mimeType': 'application/vnd.google-apps.folder'
             }
             folder = service.files().create(body=file_metadata, fields='id').execute()
             folder_id = folder.get('id')
             logging.info(
                 "Successfully created app folder: %s (ID: %s)",
-                folder_name,
+                APP_FOLDER_NAME,
                 folder_id
             )
             return folder_id
@@ -164,21 +165,31 @@ def get_or_create_app_folder(service):
     
 
 
-def upload_file_to_folder(service, folder_id, local_file_path, uuid=None):
+def upload_file_to_folder(service,
+                          folder_id,
+                          local_file_path, uuid=None):
     """
     Uploads a single file to the specified Google Drive folder,
     optionally adding a custom UUID to its appProperties.
     """
+    if not isinstance(local_file_path, (str, Path)):
+        raise TypeError(
+            "local_file_path should be a string or Path object. You have %s",
+            type(local_file_path)
+        )
+    
+    local_file_path = Path(local_file_path)
+
     if not service or not folder_id:
         logging.warning("Service or folder_id is missing, cannot upload.")
         return None
     
-    if not os.path.exists(local_file_path):
-        logging.warning("Local file not found: %s", local_file_path)
+    if not local_file_path.exists():
+        logging.warning("Local file not found: %s", str(local_file_path))
         return None
 
     try:
-        file_name = os.path.basename(local_file_path)
+        file_name = local_file_path.name
         mime_type, _ = mimetypes.guess_type(local_file_path)
         
         file_metadata = {
@@ -217,7 +228,12 @@ def upload_file_to_folder(service, folder_id, local_file_path, uuid=None):
         logging.exception("An error occurred uploading the file: %s", error)
         return None
     
-def upload_bytes_to_folder(service, folder_id, file_name, file_bytes, mime_type, uuid_str=None):
+def upload_bytes_to_folder(service,
+                           folder_id,
+                           file_name,
+                           file_bytes,
+                           mime_type,
+                           uuid_str=None):
     """
     Uploads raw bytes to the specified Google Drive folder.
     """
@@ -288,7 +304,7 @@ def get_image_bytes_by_id(service, file_id):
         done = False
         while done is False:
             status, done = downloader.next_chunk()
-            logging.info("Download to memory %s%.", int(status.progress() * 100))
+            logging.info("Download to memory %s%%.", int(status.progress() * 100))
         
         logging.info("File downloaded successfully to memory.")
         
@@ -343,8 +359,6 @@ def get_file_by_uuid(service, uuid):
         return None
 
     try:
-        # Note: appProperties keys and values must be in single quotes
-        # inside the query string.
         query = f"appProperties has {{ key='uuid' and value='{uuid}' }} and trashed=false"
         
         logging.info("Searching for file with UUID: %s...", blur_str(uuid))

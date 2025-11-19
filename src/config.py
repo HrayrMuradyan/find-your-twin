@@ -1,10 +1,8 @@
 from pathlib import Path
 import yaml
-import sys
-import os
-sys.path.append(os.path.join(os.path.dirname(__file__), "../.."))
-from src.path import get_project_root_path
 import tomli
+
+PROJECT_ROOT = Path(__file__).parent.parent
 
 def get_config_path() -> str:
     """
@@ -21,13 +19,11 @@ def get_config_path() -> str:
              as specified under [tool.find_your_twin] in pyproject.toml.
 
     """
-    # Get the project root path (1 levels above this file)
-    project_root_path = get_project_root_path(1)
 
-    # Path to pyproject.toml
-    pyproject_path = project_root_path / "pyproject.toml"
+    # Get the path to pyproject.toml from the root
+    pyproject_path = PROJECT_ROOT / "pyproject.toml"
 
-    # Check if pyproject.toml exists
+    # Pyproject.toml file should exist
     if not pyproject_path.exists():
         raise ValueError(f"The pyproject.toml file doesn't exist in the root of the project. Expected to have it here: {str(pyproject_path)}")
 
@@ -35,7 +31,7 @@ def get_config_path() -> str:
     with open(pyproject_path, "rb") as f:
         data = tomli.load(f)
 
-    # Check if tool.find_your_twin.config_path exists
+    # tool.find_your_twin.config_path should exist, get it
     try:
         return data["tool"]["find_your_twin"]["config_path"]
     except KeyError as e:
@@ -57,38 +53,27 @@ def load_config(config_path=None):
     dict
         Parsed YAML configuration as a dictionary.
 
-    Raises
-    ------
-    TypeError
-        If the input is not a string or Path.
-    ValueError
-        If the path does not exist, is not a file, or does not have a .yml or .yaml extension.
-    RuntimeError
-        If there is an error opening or reading the file.
     """
 
-    # Get config path from argument or function
+    # Config path is either an argument to the function, or get it from the toml file
     if config_path is None:
         config_path = get_config_path()
     else:
         if not isinstance(config_path, (str, Path)):
             raise TypeError(f"Variable config_path has to be a string or a Path object. You have {type(config_path)}")
 
-    # Define the project root path
-    project_root_path = get_project_root_path(1)
+    # Get the config path from the root
+    path = PROJECT_ROOT / config_path 
 
-    # Convert to Path
-    path = project_root_path / config_path 
-
-    # Verify if the argument is a file and it exists
+    # Verify that the config path is file
     if not path.is_file():
         raise ValueError(f"The config file provided in the pyproject.toml doesn't exist. You provided: {path}")
 
-    # Ensure YAML extension
+    # Config file should have yml or yaml extension
     if path.suffix not in [".yml", ".yaml"]:
         raise ValueError(f"Path '{path}' should refer to a file with a .yml or .yaml extension.")
 
-    # Try to open and parse
+    # Try to open the config file and parse it
     try:
         with open(path, "r") as f:
             main_config = yaml.safe_load(f)
