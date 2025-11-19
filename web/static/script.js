@@ -19,7 +19,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     content.classList.add('hidden');
                 }
             });
-            window.scrollTo({ top: 0, behavior: 'auto' }); // Scroll to top on tab change
+            window.scrollTo({ top: 0, behavior: 'auto' }); 
         });
     });
 
@@ -54,8 +54,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const carouselNext = document.getElementById('carousel-next');
 
     // --- Carousel State ---
-    let currentIndex = 0; // Tracks the *starting item index*
-    let itemsPerPage = 5; // Show 5 items at a time
+    let currentIndex = 0; 
+    let itemsPerPage = 5;
     let totalItems = 0;
 
     // --- Image Modal Elements ---
@@ -65,8 +65,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- About Page CTA ---
     const ctaTryNowBtn = document.getElementById('cta-try-now');
-    const consentPrivacyLink = document.getElementById('consent-privacy-link'); // For consent box link
-    const aboutPrivacyLink = document.querySelector('.about-privacy-link'); // For about page link
+    const consentPrivacyLink = document.getElementById('consent-privacy-link'); 
+    const aboutPrivacyLink = document.querySelector('.about-privacy-link'); 
 
     // --- NEW: Manage Data Elements ---
     const deleteForm = document.getElementById('delete-form');
@@ -88,7 +88,7 @@ document.addEventListener('DOMContentLoaded', () => {
     window.addEventListener('resize', () => {
         updateItemsPerPage();
         if (totalItems > 0) {
-            updateCarouselPosition(); // Re-calculate position on resize
+            updateCarouselPosition(); 
         }
     });
 
@@ -247,7 +247,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 img.onload = () => resolve(img);
                 img.onerror = () => {
                     console.error("Failed to preload image:", url);
-                    resolve(null); // Don't break Promise.all
+                    resolve(null); 
                 };
                 img.src = url;
             });
@@ -261,7 +261,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         resultsSection.classList.remove('hidden');
         resultsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        loader.classList.remove('hidden'); // Show loader
+        loader.classList.remove('hidden'); 
         topResultContainer.classList.add('hidden');
         carouselContainer.classList.add('hidden'); 
         otherResultsTitle.classList.add('hidden'); 
@@ -287,8 +287,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (!data.results || data.results.length === 0) {
                 console.log("No results returned from API.");
-                displayResults([]); // Show "no results" message if configured
-                resetControls.classList.remove('hidden'); // Show "Start Again"
+                displayResults([]); 
+                resetControls.classList.remove('hidden'); 
                 return;
             }
 
@@ -320,7 +320,6 @@ document.addEventListener('DOMContentLoaded', () => {
         carouselTrack.innerHTML = ''; 
 
         if (!results || results.length === 0) {
-            // Optional: Display a "No results found" message
             otherResultsTitle.textContent = 'No matching results found.';
             otherResultsTitle.classList.remove('hidden');
             topResultContainer.classList.add('hidden');
@@ -453,7 +452,7 @@ document.addEventListener('DOMContentLoaded', () => {
         topResultContainer.classList.add('hidden');
         carouselContainer.classList.add('hidden');
         otherResultsTitle.classList.add('hidden');
-        otherResultsTitle.textContent = 'Other Similar Results'; // Reset title
+        otherResultsTitle.textContent = 'Other Similar Results'; 
         
         carouselTrack.innerHTML = '';
         carouselTrack.style.transform = 'translateX(0%)'; 
@@ -522,7 +521,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 if (response.ok) {
                     showDeleteMessage(data.message, 'success');
-                    uuidInput.value = ''; // Clear input on success
+                    uuidInput.value = ''; 
                 } else {
                     throw new Error(data.detail || "An unknown error occurred.");
                 }
@@ -543,7 +542,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function showDeleteMessage(message, type) {
         deleteMessage.textContent = message;
         deleteMessage.classList.remove('hidden', 'success', 'error');
-        deleteMessage.classList.add(type); // 'success' or 'error'
+        deleteMessage.classList.add(type); 
     }
 
     // --- Scroll Animations for About Page ---
