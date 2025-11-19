@@ -2,7 +2,6 @@ app:
   title: "Visual Search API"
   paths:
     static: "web/static"
-    data: "data"
     index_html: "web/index.html" 
   base_url: "http://127.0.0.1:8000"
 
@@ -15,9 +14,13 @@ faiss:
   paths:
     index_path: "embeddings_store"
 
-
 image:
   max_size: 1280
+
+data:
+  path: "data/"
+  upload_max_workers: 8
+  temp_file: "batch_processing_temp.parquet"
 
 search:
   retrieval_similarity_threshold: 30

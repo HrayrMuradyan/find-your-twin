@@ -1,14 +1,14 @@
 /* --- Global & Variables --- */
 :root {
-    --primary-color: #008080; /* Teal */
+    --primary-color: #008080; 
     --primary-dark: #006a6a;
     --primary-light: #e6f2f2;
     --primary-gradient: linear-gradient(135deg, #008080, #00a0a0);
     
-    --background-color: #F8FBFB; /* Use light gray for body */
-    --surface-color: #FFFFFF;    /* Use white for cards/surfaces */
+    --background-color: #F8FBFB; 
+    --surface-color: #FFFFFF;    
     
-    --text-color: #2c3e50; /* Dark blue-gray, not pure black */
+    --text-color: #2c3e50; 
     --text-color-light: #576c80;
     --gray-light: #DCE4E3;
     --gray-medium: #888888;
@@ -123,7 +123,7 @@ body {
     transform: scale(1.02);
 }
 #drop-zone.dragover .upload-icon {
-    animation: none; /* Stop pulsing when dragging */
+    animation: none; 
 }
 
 #upload-instructions {
@@ -139,7 +139,7 @@ body {
 #drop-zone p { font-size: 1.1rem; margin: 0.5rem 0; color: var(--text-color); }
 #drop-zone .small-text { font-size: 0.9rem; color: var(--gray-medium); }
 .upload-icon {
-    font-size: 4rem; /* Icon font size */
+    font-size: 4rem; 
     line-height: 1;
     color: var(--primary-color);
     margin-bottom: 1rem;
@@ -166,7 +166,7 @@ body {
     box-shadow: var(--shadow-small);
     display: inline-block;
     text-decoration: none;
-    margin-top: 1rem; /* Base margin */
+    margin-top: 1rem; 
 }
 .btn:hover {
     background-color: var(--primary-dark);
@@ -203,7 +203,7 @@ body {
     font-weight: 500;
     margin: 0;
 }
-/* New 'copied' state for copy button */
+
 .btn.copied {
     background-color: var(--match-green);
     color: white;
@@ -251,7 +251,6 @@ body {
 .consent-box label a { color: var(--primary-color); text-decoration: none; font-weight: 500; }
 .consent-box label a:hover { text-decoration: underline; }
 
-/* --- THIS IS THE RESTORED ANIMATION --- */
 .consent-box.highlight-attention { 
     animation: pulse-highlight 1.5s ease-in-out; 
 }
@@ -260,8 +259,6 @@ body {
     50% { box-shadow: 0 0 0 10px rgba(0, 128, 128, 0.1); transform: scale(1.02); }
     100% { box-shadow: 0 0 0 0 rgba(0, 128, 128, 0); transform: scale(1); }
 }
-/* --- END OF RESTORED ANIMATION --- */
-
 
 /* --- Uploader Preview --- */
 #upload-preview {
@@ -331,7 +328,6 @@ body {
 #match-percentage-number.match-orange, .result-match-small.match-orange { color: var(--match-orange); }
 #match-percentage-number.match-red, .result-match-small.match-red { color: var(--match-red); }
 
-/* --- RESULTS CAROUSEL STYLES --- */
 #carousel-container {
     position: relative; width: 100%; padding: 0 40px;
     margin: 0 auto; max-width: 1100px;
@@ -371,7 +367,7 @@ body {
     transition: all 0.2s ease;
     display: flex; align-items: center; justify-content: center;
     padding: 0; margin: 0; margin-top: 0;
-    font-size: 1.8rem; /* Icon size */
+    font-size: 1.8rem; 
     box-shadow: var(--shadow-small);
 }
 .carousel-btn:hover {
@@ -384,7 +380,6 @@ body {
 #carousel-prev { left: -10px; }
 #carousel-next { right: -10px; }
 
-/* --- HIDE OLD GRID --- */
 #results-grid { display: none; }
 
 /* --- Loader --- */
@@ -664,7 +659,7 @@ body {
     mask-image: linear-gradient(to right, transparent, black 20%, black 80%, transparent);
 }
 .carousel-section .carousel-track {
-    display: flex; width: calc(200px * 16); /* 200px * 16 images */
+    display: flex; width: calc(200px * 16); 
     animation: scroll 40s linear infinite;
 }
 .carousel-section .carousel-track img {
@@ -674,7 +669,7 @@ body {
 }
 @keyframes scroll {
     0% { transform: translateX(0); }
-    100% { transform: translateX(calc(-200px * 8)); } /* Scroll by half */
+    100% { transform: translateX(calc(-200px * 8)); } 
 }
 
 /* --- Footer --- */
@@ -790,7 +785,7 @@ body {
     background: var(--match-red) !important;
     margin-top: 0.5rem !important;
     position: relative;
-    overflow: hidden; /* To contain the loader */
+    overflow: hidden; 
 }
 .btn-delete:hover {
     background-color: #b02a37 !important;

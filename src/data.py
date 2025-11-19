@@ -2,8 +2,9 @@ from pathlib import Path
 from collections import defaultdict
 from typing import List, Dict, Union, Any
 import sys
-import os
-sys.path.append(os.path.abspath(os.path.join(os.getcwd(), "..")))
+script_dir = Path(__file__).parent
+PROJECT_ROOT = script_dir.parent
+sys.path.append(str(PROJECT_ROOT))
 from src.file import read_json
 
 def get_all_data(
@@ -41,7 +42,7 @@ def get_all_data(
 
     """
     
-    # Validate folder type
+    # Main folder path should be a string or Path object
     if not isinstance(main_data_folder, (str, Path)):
         raise TypeError(
             f"`main_data_folder` must be a string or Path object, got {type(main_data_folder)}."
@@ -49,7 +50,7 @@ def get_all_data(
 
     main_data_folder = Path(main_data_folder)
 
-    # Validate folder existence and type
+    # The folder should exist and should be a directory
     if not main_data_folder.exists():
         raise ValueError(f"The folder '{main_data_folder}' does not exist.")
     if not main_data_folder.is_dir():
@@ -57,20 +58,23 @@ def get_all_data(
 
     combined_data_dict = defaultdict(list)
 
-    # Iterate through all subdirectories
+    # There should be subdirectories with the following structure
+    # images -> folder
+    # source_info.json -> json file containing information about each source
     for data_folder in main_data_folder.iterdir():
+
+        # Skip all items that are not folders
         if not data_folder.is_dir():
             continue
 
         image_folder = data_folder / "images"
         source_info_file = data_folder / "source_info.json"
 
-        # Skip invalid folders
+        # If there are folders not following the structure, skip them
         if not (image_folder.is_dir() and source_info_file.is_file()):
             print(f"Skipping {data_folder}: missing 'images/' or 'source_info.json'.")
             continue
 
-        # Read metadata JSON
         data_source_dict = read_json(source_info_file)
 
         # Collect image paths and metadata

@@ -1,7 +1,8 @@
 from pathlib import Path
 import sys
-import os
-sys.path.append(os.path.abspath(os.path.join(os.getcwd(), "..")))
+script_dir = Path(__file__).parent
+PROJECT_ROOT = script_dir.parent
+sys.path.append(str(PROJECT_ROOT))
 from src.file import read_json
 
 REQUIRED_KEYS = ["model_name", "class", "module", "parameters"]

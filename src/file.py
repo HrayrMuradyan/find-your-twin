@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import Any, Union
 import logging
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = Path(__file__).parent.parent
 
 def read_json(file_path: Union[str, Path]) -> Any:
     """
