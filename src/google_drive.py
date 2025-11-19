@@ -73,7 +73,10 @@ def get_drive_service():
         # Save the credentials for the next run
         with open(TOKEN_FILE_PATH, 'w') as token:
             token.write(creds.to_json())
-            logging.info("Credentials saved to %s", TOKEN_FILE_PATH)
+            logging.info(
+                "Credentials saved to %s", 
+                TOKEN_FILE_PATH.relative_to(PROJECT_ROOT)
+            )
 
     try:
         service = build('drive', 'v3', credentials=creds)
