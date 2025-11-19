@@ -470,7 +470,21 @@ body {
     border: 1px solid var(--border-color);
     box-shadow: var(--shadow-small);
 }
-.about-hero-icon { font-size: 3rem; line-height: 1; margin-bottom: 1rem; }
+.about-hero-icon {
+    margin-bottom: 1.5rem;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.about-hero-icon img {
+    width: 80%;           
+    height: 40%;          
+    object-fit: cover;     
+    border-radius: 12px;   
+    box-shadow: var(--shadow-medium);
+}
+
 .about-hero h2 { 
     border-bottom: none; padding-bottom: 0; margin-bottom: 0.75rem; 
     font-size: 2rem;
