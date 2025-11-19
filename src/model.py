@@ -1,7 +1,8 @@
 from pathlib import Path
 import sys
-import os
-sys.path.append(os.path.abspath(os.path.join(os.getcwd(), "..")))
+script_dir = Path(__file__).parent
+PROJECT_ROOT = script_dir.parent
+sys.path.append(str(PROJECT_ROOT))
 from src.file import read_json
 from src.utils import import_attr
 
@@ -24,7 +25,9 @@ def read_model_config(model_path):
         dict: The contents of the model's `config.json` file.
     """
     if not isinstance(model_path, (str, Path)):
-        raise TypeError(f"model_path argument should be a string or a Path object. You have {type(model_path)}")
+        raise TypeError(
+            f"model_path argument should be a string or a Path object. You have {type(model_path)}"
+        )
 
     model_path = Path(model_path)
     model_config_file_path = model_path / "config.json"

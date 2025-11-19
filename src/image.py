@@ -14,9 +14,6 @@ def read_image(img_path: Union[str, Path]) -> np.ndarray:
     Returns:
         np.ndarray: The image in RGB format.
 
-    Raises:
-        FileNotFoundError: If the image file does not exist.
-        TypeError: If img_path is not a string or Path.
     """
     if not isinstance(img_path, (str, Path)):
         raise TypeError(f"img_path should be a str or Path, got {type(img_path)}")
@@ -36,9 +33,6 @@ def show_image(img: Union[str, Path, np.ndarray]):
 
     Args:
         img (str, Path, or np.ndarray): Image to display. Can be a file path or an array.
-
-    Raises:
-        TypeError: If img is not a string, Path, or numpy array.
     """
     if isinstance(img, (str, Path)):
         img = read_image(img)

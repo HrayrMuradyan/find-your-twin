@@ -9,16 +9,16 @@ import io
 import uuid
 from fastapi import FastAPI, File, UploadFile, Form, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
-import sys, os
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse 
 from pathlib import Path
-import logging
+
 
 # Add project root to sys.path
+import sys
 script_dir = Path(__file__).parent
-root_dir = script_dir.parent
-sys.path.append(str(root_dir))
+PROJECT_ROOT = script_dir.parent
+sys.path.append(str(PROJECT_ROOT))
 
 # Import custom modules 
 from src.embeddings_database import AutoFaissIndex
@@ -33,6 +33,7 @@ from src.delete import remove_by_uuid
 from src.utils import blur_str
 
 # Setup logger
+import logging
 from src.logging_config import setup_logging
 setup_logging()
 logger = logging.getLogger(__name__)
@@ -42,12 +43,12 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------
 
 # Read the config
-config = load_config()
+CONFIG = load_config()
 
 # App Setup 
-app = FastAPI(title=config['app']['title'])
+app = FastAPI(title=CONFIG['app']['title'])
 
-# CORS Middlewar
+# CORS Middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"], 
@@ -57,19 +58,14 @@ app.add_middleware(
 )
 
 # --- Path Setup ---
-static_dir = root_dir / config['app']['paths']['static']
-data_dir = root_dir / config['app']['paths']['data']
-index_file = root_dir / config['app']['paths']['index_html']
+static_dir = PROJECT_ROOT / CONFIG['app']['paths']['static']
+index_file = PROJECT_ROOT / CONFIG['app']['paths']['index_html']
 
 # --- Mount Static Directories ---
 app.mount(
     "/static",
     StaticFiles(directory=static_dir),
     name="static"
-)
-app.mount("/data",
-          StaticFiles(directory=data_dir),
-          name="data"
 )
 
 # Global Variables
@@ -78,43 +74,27 @@ drive_service = None
 drive_folder_id = None
 
 # Define the Base URL
-BASE_URL = config['app']['base_url']
+BASE_URL = CONFIG['app']['base_url']
 
 # Other important global variables
-FACE_DETECT_MODEL = root_dir / config['models']['paths']['face_detect_model']
-
-EMBEDDINGS_MODEL = root_dir / config['models']['paths']['embeddings_model']
-
-FAISS_INDEX_PATH = root_dir / config['faiss']['paths']['index_path']
-
-IMAGE_MAX_SIZE = int(config['image']['max_size'])
+FACE_DETECT_MODEL = PROJECT_ROOT / CONFIG['models']['paths']['face_detect_model']
+EMBEDDINGS_MODEL = PROJECT_ROOT / CONFIG['models']['paths']['embeddings_model']
+FAISS_INDEX_PATH = PROJECT_ROOT / CONFIG['faiss']['paths']['index_path']
+IMAGE_MAX_SIZE = int(CONFIG['image']['max_size'])
 
 # Search variables
-RETRIEVAL_SIMILARITY_THRESHOLD = int(config['search']['retrieval_similarity_threshold'])
-MIN_OTHER_IMAGES = int(config['search']['min_other_images'])
-K_TO_SEARCH = int(config['search']['k_to_search']) 
-SAVE_SIMILARITY_THRESHOLD = int(config['search']['save_similarity_threshold'])
+RETRIEVAL_SIMILARITY_THRESHOLD = int(CONFIG['search']['retrieval_similarity_threshold'])
+MIN_OTHER_IMAGES = int(CONFIG['search']['min_other_images'])
+K_TO_SEARCH = int(CONFIG['search']['k_to_search']) 
+SAVE_SIMILARITY_THRESHOLD = int(CONFIG['search']['save_similarity_threshold'])
 
-# On Startup, Load Models ---
+# On Startup, Load the models
 @app.on_event("startup")
 def startup_event():
     global faiss_index, drive_service, drive_folder_id
     
     logging.info("--- Server starting up... ---")
     try:
-        logging.info(
-            "Loading FAISS index from %s...",
-            FAISS_INDEX_PATH.relative_to(root_dir)
-        )
-
-        faiss_index = AutoFaissIndex(
-            index_path=FAISS_INDEX_PATH,
-            face_detect_model=FACE_DETECT_MODEL,
-            embeddings_model=EMBEDDINGS_MODEL,
-        )
-
-        logging.info("FAISS Index loaded successfully.")
-        
         logging.info("Initializing Google Drive service...")
         drive_service = get_drive_service()
         if drive_service:
@@ -126,16 +106,30 @@ def startup_event():
             else:
                 logging.error("Could not get or create Google Drive folder.")
         else:
-            logging.error(
-                "Failed to initialize Google Drive service. Check ENV vars."
-            )
+            logging.error("Failed to initialize Google Drive service. Check ENV vars.")
+
+        logging.info(
+            "Loading FAISS index from %s...",
+            FAISS_INDEX_PATH.relative_to(PROJECT_ROOT)
+        )
+
+        faiss_index = AutoFaissIndex(
+            index_path=FAISS_INDEX_PATH,
+            face_detect_model=FACE_DETECT_MODEL,
+            embeddings_model=EMBEDDINGS_MODEL,
+            drive_service=drive_service,
+            drive_folder_id=drive_folder_id
+        )
+
+        logging.info("FAISS Index loaded successfully.")
+
     except Exception as e:
         logging.error("Something went wrong during startup: %s", e)
     
     logging.info("--- Server startup complete. ---")
 
 
-# --- API Endpoint (POST /search/) ---
+# Image search endpoint
 @app.post("/search/")
 async def search_image(
     file: UploadFile = File(...),
@@ -145,13 +139,16 @@ async def search_image(
     global faiss_index, drive_service, drive_folder_id
 
     if not faiss_index:
-        raise HTTPException(status_code=503, detail="Server is still initializing models. Please try again in a moment.")
+        raise HTTPException(
+            status_code=503,
+            detail="Server is still initializing models. Please try again in a moment."
+        )
 
     # Get the image from the upload
     contents = await file.read()
     image = Image.open(io.BytesIO(contents)).convert("RGB")
     
-    # Resize the image
+    # Resize the image to meet IMAGE_MAX_SIZE limit
     if image.height > IMAGE_MAX_SIZE or image.width > IMAGE_MAX_SIZE:
         if image.height > image.width:
             new_height = IMAGE_MAX_SIZE
@@ -160,82 +157,59 @@ async def search_image(
             new_width = IMAGE_MAX_SIZE
             new_height = int(image.height * (IMAGE_MAX_SIZE / image.width))
 
-        logging.info(
-            "Resizing image from %sx%s to %sx%s",
-            image.width,
-            image.height,
-            new_width,
-            new_height
-        )
-
+        logging.info("Resizing image from %sx%s to %sx%s", image.width, image.height, new_width, new_height)
         image = image.resize((new_width, new_height), Image.Resampling.LANCZOS)
         logging.info("Resizing successful")
     
     img_array = np.array(image)
-    logging.info(
-        "Image shape for processing: %s", img_array.shape
-    )
+    logging.info("Image shape for processing: %s", img_array.shape)
     
-    # Search Logic
+    # Search an image using the FAISS Index
     scores, ids, metadata, face_img = faiss_index.search_image(
         img_array, k=K_TO_SEARCH, return_metadata=True, return_face=True
     )
     
     if scores is None or len(scores[0]) == 0:
         return {"results": []} 
+    
     scores, ids, metadata_df = scores[0], ids[0], metadata[0]
     
     all_results = []
     highest_score = 0
-    data_dir_path = Path(data_dir).resolve()
 
+    # For all similar IDS
     for i in range(len(ids)):
-        # Image path here can be either upload ID or Local Path
-        image_path_str = metadata_df.loc[ids[i], 'img_path']
+        gdrive_file_id = metadata_df.loc[ids[i], 'gdrive_id']
+
         score_i = int(scores[i] * 100) 
 
         if i == 0:
             highest_score = score_i 
 
-        image_url = None
-        try:
-            local_path = Path(image_path_str)
-            if not local_path.is_absolute():
-                local_path = root_dir / local_path
-            
-            # If the path is a file and is relative to the data directory
-            if local_path.is_file() and local_path.resolve().is_relative_to(data_dir_path):
-                url_path_fragment = local_path.relative_to(data_dir_path).as_posix()
-                image_url = f"/data/{url_path_fragment}"
-            else:
-                image_url = f"/gdrive-image/{image_path_str}"
-        except Exception as e:
-            logging.exception(
-                "Error processing path '%s': %s. Skipping.",
-                image_path_str,
-                e
-            )
-            continue
+        # Construct the URL pointing to the proxy endpoint
+        image_url = f"/gdrive-image/{gdrive_file_id}"
+        
         all_results.append({"url": image_url, "similarity": score_i})
 
-    # Filter results
+    # If no results found, return an empty list
     if not all_results:
         return {"results": []} 
     
     # Get the top result
-    # Get at least MIN_OTHER_IMAGES results
-    # The high bound is decided using RETRIEVAL_SIMILARITY_THRESHOLD
     top_result = all_results[0]
     other_results_all = all_results[1:]
-    results_above_threshold = [r for r in other_results_all if r['similarity'] >= RETRIEVAL_SIMILARITY_THRESHOLD]
+    results_above_threshold = [
+        r for r in other_results_all if r['similarity'] >= RETRIEVAL_SIMILARITY_THRESHOLD
+    ]
+
     min_results = other_results_all[:MIN_OTHER_IMAGES]
     
-    final_other_results = []
     final_other_results = results_above_threshold if (len(results_above_threshold) >= MIN_OTHER_IMAGES) else min_results
 
     response_data = {"results": [top_result] + final_other_results}
 
-    # Handle Consent
+    # The image would be uploaded only if consent is given and
+    # The highest score is less than the save similarity threshold
     if consent and (highest_score <= SAVE_SIMILARITY_THRESHOLD):
         if not drive_service or not drive_folder_id:
             logging.warning("Consent given, but Google Drive service is not available. Skipping upload.")
@@ -262,7 +236,7 @@ async def search_image(
 
                 if uploaded_file_id:
                     image_metadata = [{
-                        'img_path': uploaded_file_id,
+                        'gdrive_id': uploaded_file_id,
                         'name': "user_data",
                         'keywords': "user"
                     }]
@@ -280,7 +254,9 @@ async def search_image(
             except Exception as e:
                 logging.exception("Error saving consented image: %s", e)
     elif consent:
-        logging.warning("Consent given, but image is a likely duplicate (score: %s}). Skipping save.", highest_score)
+        logging.warning(
+            "Consent given, but image is a likely duplicate (score: %s). Skipping save.", highest_score
+        )
 
     return response_data
 
@@ -298,20 +274,17 @@ async def delete_image_by_uuid(uuid: str):
         logging.info("Attempting to delete file with UUID: %s", blur_str(uuid))
         image_exists = remove_by_uuid(faiss_index, drive_service, uuid)
         
-
         if image_exists:
-            logging.info(f"Successfuly deleted the file with UUID: %s", blur_str(uuid))
+            logging.info(f"Successfully deleted the file with UUID: %s", blur_str(uuid))
             return {
                 "success": True,
                 "message": f"Successfully deleted image associated with UUID: {blur_str(uuid)}"
             }
-            
         else:
             return {
                 "success": False,
                 "message": f"There is no image in the database with the provided UUID."
             }
-
 
     except HTTPException as e:
         raise e
@@ -324,13 +297,19 @@ async def delete_image_by_uuid(uuid: str):
 async def get_gdrive_image(file_id: str):
     global drive_service
     if not drive_service:
-        raise HTTPException(status_code=503, detail="Google Drive service is not available.")
+        raise HTTPException(
+            status_code=503,
+            detail="Google Drive service is not available."
+        )
     try:
         image_bytes = get_image_bytes_by_id(drive_service, file_id)
         if image_bytes:
             return Response(content=image_bytes, media_type="image/jpeg")
         else:
-            raise HTTPException(status_code=404, detail="Image data not found in Google Drive.")
+            raise HTTPException(
+                status_code=404,
+                detail="Image data not found in Google Drive."
+            )
     except Exception as e:
         logging.exception("An error occurred retrieving GDrive file %s: %s", file_id, e)
         raise HTTPException(status_code=500, detail="Internal server error.")
@@ -338,8 +317,11 @@ async def get_gdrive_image(file_id: str):
 # Root Endpoint (GET /)
 @app.get("/")
 async def read_root():
-    if not os.path.exists(index_file):
-        raise HTTPException(status_code=404, detail=f"index.html not found at {index_file}")
+    if not index_file.exists():
+        raise HTTPException(
+            status_code=404,
+            detail=f"index.html not found at {str(index_file)}"
+        )
     return FileResponse(index_file)
 
 # Run the App

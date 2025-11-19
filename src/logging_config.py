@@ -26,7 +26,7 @@ def setup_logging():
 
     # DEV mode console logs
     if ENV == "dev":
-        # --- 2. This whole block is new ---
+
         LOG_FORMAT = (
             "%(asctime)s | "
             "%(log_color)s%(levelname)-8s%(reset)s | "
@@ -48,7 +48,6 @@ def setup_logging():
             secondary_log_colors={},
             style='%'
         )
-        # --- End of new block ---
 
     # In production, go with JSON.
     else:

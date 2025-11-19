@@ -27,6 +27,32 @@ def import_attr(module_name: str, attr_name: str):
     
 
 def blur_str(input_str, perc=0.8):
+    """
+    Obscure a portion of a string by replacing the last characters with asterisks.
+
+    Parameters
+    ----------
+    input_str : str
+        The original string to be partially blurred.
+    perc : float, optional (default=0.8)
+        The percentage of the string to blur. 
+        For example, perc=0.8 means 80% of the characters (from the end) 
+        will be replaced with "*".
+
+    Returns
+    -------
+    str
+        The blurred string where the last `perc * len(input_str)` characters
+        are replaced with asterisks.
+
+    Examples
+    --------
+    >>> blur_str("abcdef", perc=0.5)
+    'abc***'
+    >>> blur_str("123456789", perc=0.8)
+    '1********'
+    """
     input_len = len(input_str)
-    threshold = int(input_len*(1-perc))
-    return input_str[:threshold] + "*"*int(input_len-threshold)
+    threshold = int(input_len * (1 - perc))
+    return input_str[:threshold] + "*" * int(input_len - threshold)
+
