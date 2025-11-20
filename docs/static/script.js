@@ -37,6 +37,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const removeBtn = document.getElementById('remove-btn');
     const consentCheckbox = document.getElementById('consent-checkbox');
     const consentBox = document.querySelector('.consent-box');
+    const searchErrorMessage = document.getElementById('search-error-message');
+    const errorText = document.getElementById('error-text');
     
     // --- Results Elements ---
     const resultsSection = document.getElementById('results-section');
@@ -269,6 +271,7 @@ document.addEventListener('DOMContentLoaded', () => {
         topResultContainer.classList.add('hidden');
         carouselContainer.classList.add('hidden'); 
         otherResultsTitle.classList.add('hidden'); 
+        searchErrorMessage.classList.add('hidden');
         carouselTrack.innerHTML = ''; 
         resetControls.classList.add('hidden');
         saveInfo.classList.add('hidden'); 
@@ -278,13 +281,19 @@ document.addEventListener('DOMContentLoaded', () => {
         formData.append("consent", consentCheckbox.checked); 
 
         try {
-            // UPDATED: Use the configured API URL
             const response = await fetch(`${API_BASE_URL}/search/`, {
                 method: "POST",
                 body: formData,
             });
+
             if (!response.ok) {
                 const errData = await response.json();
+                
+                // Check specifically for the "No face detected" 400 error
+                if (response.status === 400) {
+                    throw new Error("NO_FACE"); 
+                }
+                
                 throw new Error(errData.detail || `HTTP error! status: ${response.status}`);
             }
 
@@ -324,10 +333,24 @@ document.addEventListener('DOMContentLoaded', () => {
 
         } catch (error) {
             console.error("Error during search:", error);
-            alert(`Search failed: ${error.message}. Please ensure the backend is running.`);
-            resetControls.classList.remove('hidden'); 
-        } finally {
+            
+            // Hide the loader and results
             loader.classList.add('hidden');
+            resultsSection.classList.add('hidden'); 
+
+            // Show the user-friendly error
+            if (error.message === "NO_FACE") {
+                searchErrorMessage.classList.remove('hidden');
+                errorText.textContent = "We couldn't find a face in this image. Please try uploading a photo with a clear, visible face.";
+                
+                // Scroll back up to the error message
+                searchErrorMessage.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            } else {
+                // Fallback for other errors
+                alert(`Search failed: ${error.message}`);
+            }
+            
+            resetControls.classList.remove('hidden'); 
         }
     }
 
@@ -488,6 +511,8 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // Scroll to top
         window.scrollTo({ top: 0, behavior: 'smooth' });
+
+        searchErrorMessage.classList.add('hidden');
     }
 
     // --- Image Modal Functionality ---

@@ -152,6 +152,28 @@ body {
     100% { transform: scale(1); opacity: 0.7; }
 }
 
+.error-message-container {
+    background-color: #fdf2f2;
+    color: var(--match-red);
+    border: 1px solid var(--match-red);
+    padding: 1rem;
+    border-radius: var(--border-radius);
+    margin-top: 1.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    animation: fadeIn 0.3s ease;
+}
+
+.error-message-container i {
+    font-size: 1.25rem;
+}
+
+.error-message-container.hidden {
+    display: none;
+}
+
 /* --- Buttons --- */
 .btn {
     background-color: var(--primary-color);
