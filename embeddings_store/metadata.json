@@ -1,0 +1,9 @@
+{
+  "index_type": "flat",
+  "dim": 512,
+  "models": {
+    "face_detect_model": "models/face_detect/mediapipe",
+    "embeddings_model": "models/embeddings/deepface"
+  },
+  "vector_count": 90
+}
