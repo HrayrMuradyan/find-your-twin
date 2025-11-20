@@ -1,8 +1,24 @@
 document.addEventListener('DOMContentLoaded', () => {
 
     // --- CONFIGURATION ---
-    // This points to your deployed Hugging Face API
-    const API_BASE_URL = "https://hrayrmuradyan-find-your-twin.hf.space"; 
+    
+    // 1. Define your production URL (Hugging Face)
+    const PROD_API_URL = "https://hrayrmuradyan-find-your-twin.hf.space";
+    
+    // 2. Define your local URL (Localhost Python)
+    const LOCAL_API_URL = "http://127.0.0.1:8000";
+
+    // 3. Automatically select based on where the browser is running
+    // If the domain is localhost, 127.0.0.1, or if you opened the file directly (file://)
+    const isLocalEnvironment = 
+        window.location.hostname === 'localhost' || 
+        window.location.hostname === '127.0.0.1' || 
+        window.location.protocol === 'file:';
+
+    const API_BASE_URL = isLocalEnvironment ? LOCAL_API_URL : PROD_API_URL;
+
+    console.log(`Environment detected: ${isLocalEnvironment ? 'DEVELOPMENT' : 'PRODUCTION'}`);
+    console.log(`Using API: ${API_BASE_URL}`);
 
     // --- Tab Switching ---
     const navLinks = document.querySelectorAll('.nav-link');

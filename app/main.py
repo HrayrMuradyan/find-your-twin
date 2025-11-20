@@ -57,17 +57,6 @@ app.add_middleware(
     allow_headers=["*"], 
 )
 
-# --- Path Setup ---
-static_dir = PROJECT_ROOT / CONFIG['app']['paths']['static']
-index_file = PROJECT_ROOT / CONFIG['app']['paths']['index_html']
-
-# --- Mount Static Directories ---
-app.mount(
-    "/static",
-    StaticFiles(directory=static_dir),
-    name="static"
-)
-
 # Global Variables
 faiss_index: AutoFaissIndex = None
 drive_service = None
@@ -330,12 +319,11 @@ async def get_gdrive_image(file_id: str):
 # Root Endpoint (GET /)
 @app.get("/")
 async def read_root():
-    if not index_file.exists():
-        raise HTTPException(
-            status_code=404,
-            detail=f"index.html not found at {str(index_file)}"
-        )
-    return FileResponse(index_file)
+    return {
+        "status": "online",
+        "message": "Visual Twin Search API is running. Please visit the frontend website to use the app.",
+        "docs": f"{BASE_URL}/docs"
+    }
 
 # Run the App
 if __name__ == "__main__":
