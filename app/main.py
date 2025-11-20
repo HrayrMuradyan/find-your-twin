@@ -168,9 +168,19 @@ async def search_image(
     logging.info("Image shape for processing: %s", img_array.shape)
     
     # Search an image using the FAISS Index
-    scores, ids, metadata, face_img = faiss_index.search_image(
-        img_array, k=K_TO_SEARCH, return_metadata=True, return_face=True
-    )
+    try:
+        scores, ids, metadata, face_img = faiss_index.search_image(
+            img_array, k=K_TO_SEARCH, return_metadata=True, return_face=True
+        )
+    except ValueError as e:
+        logging.warning(f"Face detection failed: {e}")
+        raise HTTPException(
+            status_code=400, 
+            detail="No face detected. Please upload a photo with a clear, visible face."
+        )
+    except Exception as e:
+        logging.error(f"Search processing error: {e}")
+        raise HTTPException(status_code=500, detail="An error occurred while processing the image.")
     
     if scores is None or len(scores[0]) == 0:
         return {"results": []} 
