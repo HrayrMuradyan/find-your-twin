@@ -4,7 +4,7 @@
 
 import uvicorn
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageOps
 import io
 import uuid
 from fastapi import FastAPI, File, UploadFile, Form, HTTPException, Response
@@ -147,6 +147,9 @@ async def search_image(
     # Get the image from the upload
     contents = await file.read()
     image = Image.open(io.BytesIO(contents)).convert("RGB")
+    
+    # This physically rotates the image if the metadata says so
+    image = ImageOps.exif_transpose(image)
     
     # Resize the image to meet IMAGE_MAX_SIZE limit
     if image.height > IMAGE_MAX_SIZE or image.width > IMAGE_MAX_SIZE:
