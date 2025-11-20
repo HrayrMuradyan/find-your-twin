@@ -1,5 +1,9 @@
 document.addEventListener('DOMContentLoaded', () => {
 
+    // --- CONFIGURATION ---
+    // This points to your deployed Hugging Face API
+    const API_BASE_URL = "https://hrayrmuradyan-find-your-twin.hf.space"; 
+
     // --- Tab Switching ---
     const navLinks = document.querySelectorAll('.nav-link');
     const tabContents = document.querySelectorAll('.tab-content');
@@ -274,7 +278,8 @@ document.addEventListener('DOMContentLoaded', () => {
         formData.append("consent", consentCheckbox.checked); 
 
         try {
-            const response = await fetch("/search/", {
+            // UPDATED: Use the configured API URL
+            const response = await fetch(`${API_BASE_URL}/search/`, {
                 method: "POST",
                 body: formData,
             });
@@ -292,12 +297,23 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
-            const imageUrls = data.results.map(result => result.url);
+            // The results now contain full URLs from the backend, but if the backend returns relative paths,
+            // we might need to prepend the API_BASE_URL.
+            // Assuming your backend returns relative URLs like "/gdrive-image/...", let's fix them.
+            const fixedResults = data.results.map(r => {
+                // If URL starts with /, prepend API base
+                if (r.url.startsWith('/')) {
+                    return { ...r, url: `${API_BASE_URL}${r.url}` };
+                }
+                return r;
+            });
+
+            const imageUrls = fixedResults.map(result => result.url);
             console.log("Preloading images...", imageUrls);
             await preloadImages(imageUrls);
             console.log("All images preloaded.");
 
-            displayResults(data.results); 
+            displayResults(fixedResults); 
 
             if (data.uuid) {
                 saveInfo.classList.remove('hidden');
@@ -513,7 +529,8 @@ document.addEventListener('DOMContentLoaded', () => {
             deleteMessage.classList.add('hidden');
 
             try {
-                const response = await fetch(`/delete/${uuid}`, {
+                // UPDATED: Use the configured API URL
+                const response = await fetch(`${API_BASE_URL}/delete/${uuid}`, {
                     method: 'DELETE',
                 });
 
