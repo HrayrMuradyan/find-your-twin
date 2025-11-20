@@ -1,0 +1,14 @@
+# Secrets
+credentials/credentials.json
+credentials/client_secrets.json
+credentials/token.json
+credentials/
+
+# Virtual Environments & Cache
+venv/
+__pycache__/
+.git/
+.gitignore
+
+# Data
+data/

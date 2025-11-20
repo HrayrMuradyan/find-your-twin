@@ -22,8 +22,8 @@ from src.utils import blur_str
 
 load_dotenv()
 
-CLIENT_SECRET_FILE_PATH = PROJECT_ROOT / os.getenv("GOOGLE_CLIENT_SECRET_PATH")
-TOKEN_FILE_PATH = PROJECT_ROOT / os.getenv("GOOGLE_TOKEN_PATH")
+CLIENT_SECRET_FILE_PATH = PROJECT_ROOT / os.getenv("GOOGLE_CLIENT_SECRET_PATH", "credentials/client_secret.json")
+TOKEN_FILE_PATH = PROJECT_ROOT / os.getenv("GOOGLE_TOKEN_PATH", "credentials/token.json")
 SCOPES = ['https://www.googleapis.com/auth/drive.file']
 APP_FOLDER_NAME = "face-similarity"
 
