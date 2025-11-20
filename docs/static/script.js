@@ -90,7 +90,8 @@ document.addEventListener('DOMContentLoaded', () => {
         else if (window.innerWidth < 1100) itemsPerPage = 4;
         else itemsPerPage = 5;
     }
-    updateItemsPerPage(); // Initial check
+    updateItemsPerPage(); 
+
     window.addEventListener('resize', () => {
         updateItemsPerPage();
         if (totalItems > 0) {
@@ -100,13 +101,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
     // --- Uploader Event Listeners ---
+    
+    // 1. Browse Button
     browseBtn.addEventListener('click', (e) => {
         e.stopPropagation(); 
         fileInput.click();
     });
 
+    // This allows clicking to replace the image even if one is already uploaded
     dropZone.addEventListener('click', (e) => {
-        if (!currentFile && e.target.closest('#upload-instructions')) { 
+        if (e.target.closest('#upload-instructions') || e.target === dropZone || e.target.closest('#upload-preview')) { 
             fileInput.click();
         }
     });
@@ -116,13 +120,13 @@ document.addEventListener('DOMContentLoaded', () => {
         if (file) {
             handleFile(file);
         }
+        // Reset value to allow selecting the same file again if needed
+        e.target.value = '';
     });
 
     dropZone.addEventListener('dragover', (e) => {
         e.preventDefault();
-        if (!currentFile) {
-            dropZone.classList.add('dragover');
-        }
+        dropZone.classList.add('dragover');
     });
 
     dropZone.addEventListener('dragleave', () => {
@@ -131,12 +135,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     dropZone.addEventListener('drop', (e) => {
         e.preventDefault();
-        if (!currentFile) {
-            dropZone.classList.remove('dragover');
-            const file = e.dataTransfer.files[0];
-            if (file) {
-                handleFile(file);
-            }
+        dropZone.classList.remove('dragover');
+        const file = e.dataTransfer.files[0];
+        if (file) {
+            handleFile(file);
         }
     });
 
@@ -147,13 +149,20 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         currentFile = file;
+
+        searchErrorMessage.classList.add('hidden');
+        resultsSection.classList.add('hidden');     
+        resetControls.classList.add('hidden');     
+
         const reader = new FileReader();
         reader.onload = (e) => {
             uploadPreview.innerHTML = `<img src="${e.target.result}" alt="Uploaded Image Preview">`;
             dropZone.classList.add('file-loaded');
         };
         reader.readAsDataURL(file);
+        
         uploadControls.classList.remove('hidden');
+        
         setTimeout(() => {
             uploadControls.scrollIntoView({ behavior: 'smooth', block: 'center' });
             setTimeout(() => {
@@ -168,6 +177,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Control Button Event Listeners ---
     searchBtn.addEventListener('click', () => {
         if (currentFile) {
+            // Hide controls while searching
             uploadControls.classList.add('hidden'); 
             uploadAndSearch(currentFile);
         }
@@ -175,7 +185,7 @@ document.addEventListener('DOMContentLoaded', () => {
     removeBtn.addEventListener('click', () => { resetApp(); });
     startAgainBtn.addEventListener('click', () => { resetApp(); });
     
-    // REFINED: Use classes for state
+    // Copy UUID Logic
     copyUuidBtn.addEventListener('click', () => {
         const uuid = userUuid.textContent;
         if (navigator.clipboard) {
@@ -267,12 +277,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
         resultsSection.classList.remove('hidden');
         resultsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        
         loader.classList.remove('hidden'); 
+        
+        // Hide result containers initially
         topResultContainer.classList.add('hidden');
         carouselContainer.classList.add('hidden'); 
         otherResultsTitle.classList.add('hidden'); 
         searchErrorMessage.classList.add('hidden');
         carouselTrack.innerHTML = ''; 
+        
         resetControls.classList.add('hidden');
         saveInfo.classList.add('hidden'); 
 
@@ -302,15 +316,15 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!data.results || data.results.length === 0) {
                 console.log("No results returned from API.");
                 displayResults([]); 
+                
+                loader.classList.add('hidden'); 
+            
                 resetControls.classList.remove('hidden'); 
                 return;
             }
 
-            // The results now contain full URLs from the backend, but if the backend returns relative paths,
-            // we might need to prepend the API_BASE_URL.
-            // Assuming your backend returns relative URLs like "/gdrive-image/...", let's fix them.
+            // Fix URLs
             const fixedResults = data.results.map(r => {
-                // If URL starts with /, prepend API base
                 if (r.url.startsWith('/')) {
                     return { ...r, url: `${API_BASE_URL}${r.url}` };
                 }
@@ -321,7 +335,10 @@ document.addEventListener('DOMContentLoaded', () => {
             console.log("Preloading images...", imageUrls);
             await preloadImages(imageUrls);
             console.log("All images preloaded.");
-
+            
+            // --- FIX: Hide loader before showing results ---
+            loader.classList.add('hidden');
+            
             displayResults(fixedResults); 
 
             if (data.uuid) {
@@ -334,22 +351,32 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (error) {
             console.error("Error during search:", error);
             
-            // Hide the loader and results
+            // 1. Hide the loader
             loader.classList.add('hidden');
-            resultsSection.classList.add('hidden'); 
+            
+            // 2. Hide the content parts of the results section
+            topResultContainer.classList.add('hidden');
+            carouselContainer.classList.add('hidden');
+            otherResultsTitle.classList.add('hidden');
 
-            // Show the user-friendly error
+            // 3. Keep the results section wrapper visible so "Start Again" can be seen
+            resultsSection.classList.remove('hidden'); 
+
+            // 4. Handle Specific Errors
             if (error.message === "NO_FACE") {
                 searchErrorMessage.classList.remove('hidden');
                 errorText.textContent = "We couldn't find a face in this image. Please try uploading a photo with a clear, visible face.";
                 
-                // Scroll back up to the error message
+                // Scroll to the error
                 searchErrorMessage.scrollIntoView({ behavior: 'smooth', block: 'center' });
             } else {
-                // Fallback for other errors
-                alert(`Search failed: ${error.message}`);
+                // Generic error fallback
+                searchErrorMessage.classList.remove('hidden');
+                errorText.textContent = `Search failed: ${error.message}`;
+                searchErrorMessage.scrollIntoView({ behavior: 'smooth', block: 'center' });
             }
             
+            uploadControls.classList.add('hidden');   
             resetControls.classList.remove('hidden'); 
         }
     }
@@ -366,7 +393,6 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         
-        // Ensure default title is set
         otherResultsTitle.textContent = 'Other Similar Results';
 
         const topResult = results[0];
@@ -422,11 +448,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Carousel Helper Functions ---
     function updateCarouselPosition() {
-        // Ensure itemsPerPage is at least 1 to avoid division by zero
         const safeItemsPerPage = Math.max(1, itemsPerPage);
         const itemWidthPercent = 100 / safeItemsPerPage;
         
-        // Clamp currentIndex to valid range
         const maxIndex = Math.max(0, totalItems - safeItemsPerPage);
         currentIndex = Math.max(0, Math.min(currentIndex, maxIndex));
         
@@ -455,7 +479,6 @@ document.addEventListener('DOMContentLoaded', () => {
             const elapsedTime = currentTime - startTime;
             const progress = Math.min(elapsedTime / duration, 1);
             
-            // Ease-out quad function: progress * (2 - progress)
             const easedProgress = progress * (2 - progress);
             
             const current = Math.floor(easedProgress * finalTarget);
@@ -509,7 +532,6 @@ document.addEventListener('DOMContentLoaded', () => {
         matchPercentageNumber.textContent = '0';
         matchPercentageNumber.classList.remove('match-green', 'match-orange', 'match-red');
         
-        // Scroll to top
         window.scrollTo({ top: 0, behavior: 'smooth' });
 
         searchErrorMessage.classList.add('hidden');
@@ -546,7 +568,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
-            // Show loading state
             deleteBtn.classList.add('loading');
             deleteBtn.querySelector('.btn-text').classList.add('hidden');
             deleteBtn.querySelector('.btn-loader').classList.remove('hidden');
@@ -554,7 +575,6 @@ document.addEventListener('DOMContentLoaded', () => {
             deleteMessage.classList.add('hidden');
 
             try {
-                // UPDATED: Use the configured API URL
                 const response = await fetch(`${API_BASE_URL}/delete/${uuid}`, {
                     method: 'DELETE',
                 });
@@ -572,7 +592,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 console.error("Error deleting file:", error);
                 showDeleteMessage(error.message, 'error');
             } finally {
-                // Hide loading state
                 deleteBtn.classList.remove('loading');
                 deleteBtn.querySelector('.btn-text').classList.remove('hidden');
                 deleteBtn.querySelector('.btn-loader').classList.add('hidden');
@@ -600,7 +619,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }, { threshold: 0.1 });
         animatedElements.forEach(el => observer.observe(el));
     } else {
-        // Fallback for older browsers
         animatedElements.forEach(el => el.classList.add('is-visible'));
     }
 });
