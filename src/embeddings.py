@@ -8,6 +8,7 @@ script_dir = Path(__file__).parent
 PROJECT_ROOT = script_dir.parent
 sys.path.append(str(PROJECT_ROOT))
 from src.image import read_image
+from PIL import Image
 
 import logging
 logger = logging.getLogger(__name__)
@@ -76,6 +77,8 @@ class DeepFaceEmbedder:
             image = read_image(img)
         elif isinstance(img, np.ndarray):
             image = img.copy()
+        elif isinstance(img, Image.Image):
+            image = np.asarray(img)
         else:
             raise TypeError(
                 f"Argument 'img' must be str, Path, or np.ndarray, got {type(img)}."

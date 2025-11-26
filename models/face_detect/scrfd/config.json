@@ -1,0 +1,11 @@
+{
+    "model_name": "scrfd_face_detector",
+    "class": "SCR_Face_Detector",
+    "module": "src.face_detection",
+    "parameters": {
+        "model_path": "scrfd.onnx",
+        "detection_probability": 0.5,
+        "rotation_angles": [90, 180, 270],
+        "rotate_when_score_lt": 0.7
+    }
+}

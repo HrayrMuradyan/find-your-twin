@@ -3,8 +3,12 @@ from typing import Union
 import cv2
 import numpy as np
 import matplotlib.pyplot as plt
+from PIL import Image
 
-def read_image(img_path: Union[str, Path]) -> np.ndarray:
+import logging
+logger = logging.getLogger(__name__)
+
+def read_image(img_path: Union[str, Path], return_numpy=True) -> np.ndarray:
     """
     Reads an image from a file path and converts it to RGB format.
 
@@ -24,7 +28,7 @@ def read_image(img_path: Union[str, Path]) -> np.ndarray:
         raise FileNotFoundError(f"No image found at path: {img_path}")
 
     image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-    return image_rgb
+    return image_rgb if return_numpy else Image.fromarray(image_rgb)
 
 
 def show_image(img: Union[str, Path, np.ndarray]):
@@ -42,3 +46,34 @@ def show_image(img: Union[str, Path, np.ndarray]):
     plt.imshow(img)
     plt.axis('off')  
     plt.show()
+
+
+def resize_image(image, image_max_size):
+    """
+    Resizes the image to fit within IMAGE_MAX_SIZE while maintaining aspect ratio.
+
+    Args:
+        image (PIL.Image.Image): The input PIL Image object.
+
+    Returns:
+        PIL.Image.Image: The resized image if larger than max size, 
+                         otherwise the original image.
+    """
+    if image.height > image_max_size or image.width > image_max_size:
+        if image.height > image.width:
+            new_height = image_max_size
+            new_width = int(image.width * (image_max_size / image.height))
+        else:
+            new_width = image_max_size
+            new_height = int(image.height * (image_max_size / image.width))
+
+        logging.info(
+            "Resizing image from %sx%s to %sx%s", 
+            image.width, image.height, new_width, new_height
+        )
+        
+        image = image.resize((new_width, new_height), Image.Resampling.LANCZOS)
+        
+        logging.info("Resizing successful")
+        
+    return image

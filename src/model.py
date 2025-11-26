@@ -5,6 +5,8 @@ PROJECT_ROOT = script_dir.parent
 sys.path.append(str(PROJECT_ROOT))
 from src.file import read_json
 from src.utils import import_attr
+import logging
+logger = logging.getLogger(__name__)
 
 def read_model_config(model_path):
     """
@@ -35,7 +37,25 @@ def read_model_config(model_path):
     if not model_config_file_path.is_file():
         raise ValueError(f"Model {model_path} is corrupt. Use a different model.")
 
-    return read_json(model_config_file_path)
+    model_config = read_json(model_config_file_path)
+
+    logging.info(
+        "Model %s config loaded.",
+        model_path.relative_to(PROJECT_ROOT)
+    )
+    logging.info("Config:")
+    for parameter, value in model_config.items():
+        if isinstance(value, dict):
+            logging.info("   %s:", parameter.capitalize())
+            for p, v in value.items():
+                logging.info("      %s -> %s", p, v)
+        else:
+            logging.info("   %s -> %s", parameter, value)
+
+    if "model_path" in model_config["parameters"]:
+        model_config["parameters"]["model_path"] = str(model_path / model_config["parameters"]["model_path"])
+
+    return model_config
 
 def load_model(model_config):
     """
