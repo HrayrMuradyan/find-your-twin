@@ -116,7 +116,7 @@ def startup_event():
         logging.info("Face Detection model: %s", FACE_DETECT_MODEL.relative_to(PROJECT_ROOT))
 
     except Exception as e:
-        logging.error("Something went wrong during startup: %s", e)
+        logging.exception("Something went wrong during startup: %s", e)
     
     logging.info("--- Server startup complete. ---")
 

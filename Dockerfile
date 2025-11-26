@@ -7,8 +7,8 @@ WORKDIR /app
 
 # Copy requirements and install them
 COPY requirements_docker.txt .
-RUN pip install --no-cache-dir -r requirements_docker.txt
-RUN pip install scrfd --no-deps
+RUN pip install --no-cache-dir -r requirements_docker.txt && \
+    pip install scrfd --no-deps
 
 # Install system dependencies for OpenCV 
 RUN apt-get update && apt-get install -y \
