@@ -383,8 +383,8 @@ class AutoFaissIndex:
         meta = {
             "index_type": self.index_type, "dim": self.dim,
             "models": {
-                "face_detect_model": str(self.face_detect_model.relative_to(PROJECT_ROOT)),
-                "embeddings_model": str(self.embeddings_model.relative_to(PROJECT_ROOT))
+                "face_detect_model": self.face_detect_model.relative_to(PROJECT_ROOT).as_posix(),
+                "embeddings_model": self.embeddings_model.relative_to(PROJECT_ROOT).as_posix()
             },
             "vector_count": self.index.ntotal,
         }
