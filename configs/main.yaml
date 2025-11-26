@@ -7,7 +7,7 @@ app:
 
 models:
   paths:
-    face_detect_model: "models/face_detect/mediapipe"
+    face_detect_model: "models/face_detect/scrfd"
     embeddings_model: "models/embeddings/deepface"
 
 faiss:

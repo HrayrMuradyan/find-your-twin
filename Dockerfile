@@ -16,7 +16,12 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy all your files into the container
-COPY . .
+COPY pyproject.toml /app/pyproject.toml
+COPY src /app/src
+COPY models /app/models
+COPY embeddings_store /app/embeddings_store
+COPY configs /app/configs
+COPY app /app/app
 
 # Create a writable directory for temporary files (for deepface)
 RUN mkdir -p /app/.deepface && chmod -R 777 /app/.deepface

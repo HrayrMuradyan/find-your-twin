@@ -96,7 +96,7 @@ def scan_data_sources(data_root: Path,
     logger.info(
         "Scanning %s potential sources in %s...",
         len(sub_sources),
-        data_root
+        data_root.relative_to(PROJECT_ROOT)
     )
 
     for source_dir in sub_sources:
@@ -172,7 +172,7 @@ def run_pipeline():
         # Get all image_paths and their metadata from all sources from the dataset root
         image_paths, metadata_list = scan_data_sources(DATASET_ROOT)
         
-        image_paths, metadata_list = image_paths[:100], metadata_list[:100]
+        image_paths, metadata_list = image_paths[:50], metadata_list[:50]
         
         if not image_paths:
             logger.error("No images found in any valid source folders!")
@@ -196,7 +196,10 @@ def run_pipeline():
     # PHASE 2: MULTIPROCESS UPLOAD 
     # ---------------------------------------------------------
     logger.info("Starting PHASE 2: Uploads")
-    
+    if not TEMP_DATA_FILE.exists():
+        logging.error("The temporary data file '%s' doesn't exist. Can't upload...", TEMP_DATA_FILE)
+        return
+
     df = pd.read_parquet(TEMP_DATA_FILE)
 
     # Initially, gdrive_id shouldn't be present

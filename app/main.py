@@ -31,6 +31,7 @@ from src.google_drive import (
 from src.config import load_config
 from src.delete import remove_by_uuid
 from src.utils import blur_str
+from src.image import resize_image
 
 # Setup logger
 import logging
@@ -111,6 +112,8 @@ def startup_event():
         )
 
         logging.info("FAISS Index loaded successfully.")
+        logging.info("Embedding model: %s", EMBEDDINGS_MODEL.relative_to(PROJECT_ROOT))
+        logging.info("Face Detection model: %s", FACE_DETECT_MODEL.relative_to(PROJECT_ROOT))
 
     except Exception as e:
         logging.error("Something went wrong during startup: %s", e)
@@ -141,17 +144,7 @@ async def search_image(
     image = ImageOps.exif_transpose(image)
     
     # Resize the image to meet IMAGE_MAX_SIZE limit
-    if image.height > IMAGE_MAX_SIZE or image.width > IMAGE_MAX_SIZE:
-        if image.height > image.width:
-            new_height = IMAGE_MAX_SIZE
-            new_width = int(image.width * (IMAGE_MAX_SIZE / image.height))
-        else:
-            new_width = IMAGE_MAX_SIZE
-            new_height = int(image.height * (IMAGE_MAX_SIZE / image.width))
-
-        logging.info("Resizing image from %sx%s to %sx%s", image.width, image.height, new_width, new_height)
-        image = image.resize((new_width, new_height), Image.Resampling.LANCZOS)
-        logging.info("Resizing successful")
+    image = resize_image(image, IMAGE_MAX_SIZE)
     
     img_array = np.array(image)
     logging.info("Image shape for processing: %s", img_array.shape)
@@ -168,7 +161,7 @@ async def search_image(
             detail="No face detected. Please upload a photo with a clear, visible face."
         )
     except Exception as e:
-        logging.error(f"Search processing error: {e}")
+        logging.exception(f"Search processing error: {e}")
         raise HTTPException(status_code=500, detail="An error occurred while processing the image.")
     
     if scores is None or len(scores[0]) == 0:

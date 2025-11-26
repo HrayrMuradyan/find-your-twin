@@ -58,6 +58,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // --- Results Elements ---
     const resultsSection = document.getElementById('results-section');
+    const resultsHeader = resultsSection.querySelector('h3'); // <--- NEW: Selected the Header
     const loader = document.getElementById('loader');
     const topResultContainer = document.getElementById('top-result-container');
     const topResultImageWrapper = document.getElementById('top-result-image-wrapper');
@@ -292,6 +293,7 @@ document.addEventListener('DOMContentLoaded', () => {
         console.log('Uploading file:', file.name);
 
         resultsSection.classList.remove('hidden');
+        resultsHeader.classList.remove('hidden'); // <--- NEW: Reset header visibility on start
         resultsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
         
         loader.classList.remove('hidden'); 
@@ -380,6 +382,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // 4. Handle Specific Errors
             if (error.message === "NO_FACE") {
+                resultsHeader.classList.add('hidden'); // <--- NEW: Hide header on this specific error
                 searchErrorMessage.classList.remove('hidden');
                 errorText.textContent = "We couldn't find a face in this image. Please try uploading a photo with a clear, visible face.";
                 

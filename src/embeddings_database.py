@@ -78,6 +78,9 @@ class AutoFaissIndex:
             self.embeddings_model_config = None
             self.face_detector = None
             self.embedder = None
+
+            self._ensure_models_loaded()
+
         else:
             if any(database_files_exist):
                 for f in database_necessary_files:
@@ -106,7 +109,7 @@ class AutoFaissIndex:
                 "gdrive_id": pd.Series(dtype="string")
             })
             self._save()
-            logging.info("New FAISS Index is created at: '%s'", self.index_path)
+            logging.info("New FAISS Index is created at: '%s'", self.index_path.relative_to(PROJECT_ROOT))
             logging.info("FAISS Index successfuly loaded")
 
     # -------------------------------------------------------------------------
@@ -118,7 +121,7 @@ class AutoFaissIndex:
                                  output_file: Path,
                                  save_threshold: int = 500):
         """
-        Detects faces and computes embeddings locally. 
+        Detects a face and computes embeddings locally. 
         Saves results (UUID + Embedding) to a Parquet file. 
         """
         self._ensure_models_loaded()
@@ -129,14 +132,14 @@ class AutoFaissIndex:
         
         for i, img_path in enumerate(tqdm(image_paths, desc="PHASE 1 (Compute)")):
             try:
-                # Read the image and detect faces
-                img_arr = read_image(img_path)
-                faces = self.face_detector.detect(img_arr)
+                # Read the image and detect face
+                img = read_image(img_path, return_numpy=False)
+                face = self.face_detector.detect(img)
                 
                 # Delete the image and free memory
-                del img_arr 
+                del img 
                 
-                if not faces:
+                if not face:
                     logging.warning(
                         "No face found for the image at path: '%s', skipping...",
                         img_path
@@ -144,7 +147,7 @@ class AutoFaissIndex:
                     continue
                     
                 # Take the first face and calculate the embeddings
-                embedding = self.embedder.compute_embeddings(faces[0])
+                embedding = self.embedder.compute_embeddings(face)
                 
                 # Assign a new UUID
                 file_uuid = str(uuid.uuid4())
@@ -161,7 +164,7 @@ class AutoFaissIndex:
                 data_records.append(record)
 
             except Exception as e:
-                logger.warning("Failed to process %s: %s", img_path, e)
+                logger.exception("Failed to process %s: %s", img_path, e)
                 continue
             
             # Save when number of records is higher than save threshold 
@@ -173,8 +176,11 @@ class AutoFaissIndex:
         # Save the last batch
         if data_records:
             self._append_to_parquet(data_records, output_file)
-            
-        logger.info("PHASE 1 Complete. Intermediate data saved to %s", str(output_file))
+
+        if not output_file.exists():
+            logging.error("No images were processed. Something is wrong with the data directory you provided.")
+        else:
+            logger.info("PHASE 1 Complete. Intermediate data saved to %s", str(output_file))
 
     def _append_to_parquet(self,
                            data: List[Dict],
@@ -307,16 +313,16 @@ class AutoFaissIndex:
                      return_face: bool = False):
         
         self._ensure_models_loaded()
-        if isinstance(image, (str, Path)): image_arr = read_image(image)
-        else: image_arr = image
+        if isinstance(image, (str, Path)):
+            image_arr = read_image(image)
+        else:
+            image_arr = image
         
-        faces = self.face_detector.detect(image_arr)
-        if not faces:
-            raise ValueError("No face detected.")
-        if len(faces) > 1:
-            raise ValueError("Multiple faces detected.") 
+        face = self.face_detector.detect(image_arr)
+
+        if face is None:
+            raise ValueError
         
-        face = faces[0]
         query = self.embedder.compute_embeddings(face)
         distances, ids, results = self.search_query(query, k, return_metadata)
         
@@ -358,19 +364,14 @@ class AutoFaissIndex:
             logger.exception("Upload failed")
             raise
 
-        faces = self.face_detector.detect(image_arr)
-        if not faces:
+        face = self.face_detector.detect(image_arr)
+        if not face:
             return
         
-        embeddings_batch = []
-        metadata_batch = []
-        for face in faces:
-            embeddings_batch.append(self.embedder.compute_embeddings(face))
-            new_metadata = metadata.copy()
-            new_metadata['gdrive_id'] = uploaded_file_id
-            metadata_batch.append(new_metadata)
-        
-        self.add(embeddings=embeddings_batch, metadata=metadata_batch)
+        new_metadata = metadata.copy()
+        new_metadata['gdrive_id'] = uploaded_file_id
+
+        self.add(embeddings=self.embedder.compute_embeddings(face), metadata=new_metadata)
 
     def _save(self):
         faiss.write_index(self.index, str(self.index_file))
@@ -382,8 +383,8 @@ class AutoFaissIndex:
         meta = {
             "index_type": self.index_type, "dim": self.dim,
             "models": {
-                "face_detect_model": str(self.face_detect_model),
-                "embeddings_model": str(self.embeddings_model)
+                "face_detect_model": str(self.face_detect_model.relative_to(PROJECT_ROOT)),
+                "embeddings_model": str(self.embeddings_model.relative_to(PROJECT_ROOT))
             },
             "vector_count": self.index.ntotal,
         }
@@ -395,11 +396,12 @@ class AutoFaissIndex:
         index_metadata = read_json(self.index_metadata_file)
         self.dim = index_metadata["dim"]
         self.index_type = index_metadata["index_type"]
-        self.face_detect_model = Path(index_metadata["models"]["face_detect_model"])
-        self.embeddings_model = Path(index_metadata["models"]["embeddings_model"])
+        self.face_detect_model = PROJECT_ROOT / Path(index_metadata["models"]["face_detect_model"])
+        self.embeddings_model = PROJECT_ROOT / Path(index_metadata["models"]["embeddings_model"])
 
     def _ensure_models_loaded(self):
-        if self.face_detector and self.embedder: return
+        if self.face_detector and self.embedder:
+            return
         
         logger.info("Loading models...")
         if self.face_detect_model_config is None:
