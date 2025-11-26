@@ -172,7 +172,7 @@ def run_pipeline():
         # Get all image_paths and their metadata from all sources from the dataset root
         image_paths, metadata_list = scan_data_sources(DATASET_ROOT)
         
-        image_paths, metadata_list = image_paths[:50], metadata_list[:50]
+        image_paths, metadata_list = image_paths[:250], metadata_list[:250]
         
         if not image_paths:
             logger.error("No images found in any valid source folders!")
