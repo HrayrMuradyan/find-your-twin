@@ -6,13 +6,11 @@ import uvicorn
 import numpy as np
 from PIL import Image, ImageOps
 import io
-import uuid
 from fastapi import FastAPI, File, UploadFile, Form, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse 
 from pathlib import Path
-
+import logging
 
 # Add project root to sys.path
 import sys
@@ -25,31 +23,25 @@ from src.embeddings_database import AutoFaissIndex
 from src.google_drive import (
     get_drive_service,
     get_or_create_app_folder,
-    upload_bytes_to_folder,
     get_image_bytes_by_id
 )
 from src.config import load_config
-from src.delete import remove_by_uuid
 from src.utils import blur_str
 from src.image import resize_image
+from src.logging_config import setup_logging
 
 # Setup logger
-import logging
-from src.logging_config import setup_logging
 setup_logging()
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------
-# DECLARING IMPORTANT VARIABLES
+# CONFIGURATION
 # ---------------------------------------------------
 
-# Read the config
 CONFIG = load_config()
-
-# App Setup 
 app = FastAPI(title=CONFIG['app']['title'])
 
-# CORS Middleware
+# CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"], 
@@ -58,266 +50,182 @@ app.add_middleware(
     allow_headers=["*"], 
 )
 
-# Global Variables
+# Global State
 faiss_index: AutoFaissIndex = None
 drive_service = None
 drive_folder_id = None
 
-# Define the Base URL
 BASE_URL = CONFIG['app']['base_url']
-
-# Other important global variables
 FACE_DETECT_MODEL = PROJECT_ROOT / CONFIG['models']['paths']['face_detect_model']
 EMBEDDINGS_MODEL = PROJECT_ROOT / CONFIG['models']['paths']['embeddings_model']
-FAISS_INDEX_PATH = PROJECT_ROOT / CONFIG['faiss']['paths']['index_path']
 IMAGE_MAX_SIZE = int(CONFIG['image']['max_size'])
 
-# Search variables
+# Search thresholds
 RETRIEVAL_SIMILARITY_THRESHOLD = int(CONFIG['search']['retrieval_similarity_threshold'])
 MIN_OTHER_IMAGES = int(CONFIG['search']['min_other_images'])
 K_TO_SEARCH = int(CONFIG['search']['k_to_search']) 
 SAVE_SIMILARITY_THRESHOLD = int(CONFIG['search']['save_similarity_threshold'])
 
-# On Startup, Load the models
+# ---------------------------------------------------
+# STARTUP
+# ---------------------------------------------------
 @app.on_event("startup")
 def startup_event():
     global faiss_index, drive_service, drive_folder_id
     
-    logging.info("--- Server starting up... ---")
+    logger.info("--- Server starting up... ---")
     try:
-        logging.info("Initializing Google Drive service...")
+        # 1. Init Google Drive
+        logger.info("Initializing Google Drive service...")
         drive_service = get_drive_service()
         if drive_service:
-            logging.info("Google Drive service initialized successfully.")
             drive_folder_id = get_or_create_app_folder(drive_service)
-
-            if drive_folder_id:
-                logging.info("Google Drive folder ID set: %s", drive_folder_id)
-            else:
-                logging.error("Could not get or create Google Drive folder.")
+            logger.info("Google Drive initialized. Folder ID: %s", drive_folder_id)
         else:
-            logging.error("Failed to initialize Google Drive service. Check ENV vars.")
+            logger.error("Failed to initialize Google Drive. Check ENV vars.")
 
-        logging.info(
-            "Loading FAISS index from %s...",
-            FAISS_INDEX_PATH.relative_to(PROJECT_ROOT)
-        )
-
+        # Init FAISS and Database
+        logger.info("Initializing Database & FAISS...")
         faiss_index = AutoFaissIndex(
-            index_path=FAISS_INDEX_PATH,
             face_detect_model=FACE_DETECT_MODEL,
             embeddings_model=EMBEDDINGS_MODEL,
             drive_service=drive_service,
             drive_folder_id=drive_folder_id
         )
-
-        logging.info("FAISS Index loaded successfully.")
-        logging.info("Embedding model: %s", EMBEDDINGS_MODEL.relative_to(PROJECT_ROOT))
-        logging.info("Face Detection model: %s", FACE_DETECT_MODEL.relative_to(PROJECT_ROOT))
+        logger.info("System ready")
 
     except Exception as e:
-        logging.exception("Something went wrong during startup: %s", e)
-    
-    logging.info("--- Server startup complete. ---")
+        logger.exception("Startup failed: %s", e)
 
+# ---------------------------------------------------
+# ENDPOINTS
+# ---------------------------------------------------
 
-# Image search endpoint
 @app.post("/search/")
 async def search_image(
     file: UploadFile = File(...),
     consent: bool = Form(False) 
 ):
-    logging.info("Starting an image search...")
-    global faiss_index, drive_service, drive_folder_id
-
+    global faiss_index
     if not faiss_index:
-        raise HTTPException(
-            status_code=503,
-            detail="Server is still initializing models. Please try again in a moment."
-        )
+        raise HTTPException(status_code=503, detail="Server initializing.")
 
-    # Get the image from the upload
+    # Read & Preprocess Image
     contents = await file.read()
     image = Image.open(io.BytesIO(contents)).convert("RGB")
-    
-    # This physically rotates the image if the metadata says so
     image = ImageOps.exif_transpose(image)
-    
-    # Resize the image to meet IMAGE_MAX_SIZE limit
     image = resize_image(image, IMAGE_MAX_SIZE)
-    
     img_array = np.array(image)
-    logging.info("Image shape for processing: %s", img_array.shape)
     
-    # Search an image using the FAISS Index
+    # Search
     try:
-        scores, ids, metadata, face_img = faiss_index.search_image(
-            img_array, k=K_TO_SEARCH, return_metadata=True, return_face=True
-        )
-    except ValueError as e:
-        logging.warning(f"Face detection failed: {e}")
-        raise HTTPException(
-            status_code=400, 
-            detail="No face detected. Please upload a photo with a clear, visible face."
-        )
+        # We request 3 values: distances, indices, and the list of result dicts
+        _, _, similar_images = faiss_index.search_image(img_array, k=K_TO_SEARCH)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="No face detected in upload.")
     except Exception as e:
-        logging.exception(f"Search processing error: {e}")
-        raise HTTPException(status_code=500, detail="An error occurred while processing the image.")
+        logger.exception("Search failed: %s", e)
+        raise HTTPException(status_code=500, detail="Processing error.")
     
-    if scores is None or len(scores[0]) == 0:
-        return {"results": []} 
-    
-    scores, ids, metadata_df = scores[0], ids[0], metadata[0]
-    
-    all_results = []
-    highest_score = 0
-
-    # For all similar IDS
-    for i in range(len(ids)):
-        gdrive_file_id = metadata_df.loc[ids[i], 'gdrive_id']
-
-        score_i = int(scores[i] * 100) 
-
-        if i == 0:
-            highest_score = score_i 
-
-        # Construct the URL pointing to the proxy endpoint
-        image_url = f"/gdrive-image/{gdrive_file_id}"
+    # Format results for frontend
+    if not similar_images:
+        # Even if no results, we might still want to save if consent is given
+        formatted_results = []
+        highest_similarity = 0
+    else:
+        formatted_results = []
+        highest_similarity = 0
         
-        all_results.append({"url": image_url, "similarity": score_i})
+        for similar_i in similar_images:
+            raw_score = similar_i['score']
+            similarity_score = int(max(0, raw_score) * 100)
+            
+            formatted_results.append({
+                "url": f"/gdrive-image/{similar_i['drive_id']}",
+                "similarity": similarity_score
+            })
+            
+            if similarity_score > highest_similarity:
+                highest_similarity = similarity_score
 
-    # If no results found, return an empty list
-    if not all_results:
-        return {"results": []} 
-    
-    # Get the top result
-    top_result = all_results[0]
-    other_results_all = all_results[1:]
-    results_above_threshold = [
-        r for r in other_results_all if r['similarity'] >= RETRIEVAL_SIMILARITY_THRESHOLD
-    ]
+    # Prepare response data
+    if formatted_results:
+        top_result = formatted_results[0]
+        other_results = formatted_results[1:]
+        
+        valid_others = [res for res in other_results if res['similarity'] >= RETRIEVAL_SIMILARITY_THRESHOLD]
+        final_others = valid_others if len(valid_others) >= MIN_OTHER_IMAGES else other_results[:MIN_OTHER_IMAGES]
+        
+        response_data = {"results": [top_result] + final_others}
+    else:
+        response_data = {"results": []}
 
-    min_results = other_results_all[:MIN_OTHER_IMAGES]
-    
-    final_other_results = results_above_threshold if (len(results_above_threshold) >= MIN_OTHER_IMAGES) else min_results
-
-    response_data = {"results": [top_result] + final_other_results}
-
-    # The image would be uploaded only if consent is given and
-    # The highest score is less than the save similarity threshold
-    if consent and (highest_score <= SAVE_SIMILARITY_THRESHOLD):
-        if not drive_service or not drive_folder_id:
-            logging.warning("Consent given, but Google Drive service is not available. Skipping upload.")
+    # Handle Consent (Save Image)
+    if consent:
+        # Check if it's a duplicate (using the configured threshold)
+        if highest_similarity > SAVE_SIMILARITY_THRESHOLD:
+            logger.info("Consent given, but image is likely duplicate (Score: %s). Skipping save.", highest_similarity)
         else:
             try:
-                new_uuid = str(uuid.uuid4())
-                file_name = f"{new_uuid}.jpg"
-                logging.info("Consent given. Uploading %s...", blur_str(file_name))
-
-                with io.BytesIO() as output:
-                    image.save(output, format="JPEG")
-                    resized_contents = output.getvalue()
-
-                image_embeddings = faiss_index.embedder.compute_embeddings(img=face_img)
+                logger.info("Consent given. Saving new face...")
                 
-                uploaded_file_id = upload_bytes_to_folder(
-                    service=drive_service,
-                    folder_id=drive_folder_id,
-                    file_name=file_name,
-                    file_bytes=resized_contents, 
-                    mime_type="image/jpeg", 
-                    uuid_str=new_uuid 
+                # Save the image
+                new_uuid = faiss_index.add_image(
+                    image=img_array, 
+                    metadata={'name': 'user_data'}
                 )
-
-                if uploaded_file_id:
-                    image_metadata = [{
-                        'gdrive_id': uploaded_file_id,
-                        'name': "user_data",
-                        'keywords': "user"
-                    }]
-
-                    faiss_index.add(
-                        embeddings = image_embeddings,
-                        metadata = image_metadata
-                    )
-
-                    logging.info("Successfully added image to FAISS and Google Drive.")
-                    response_data["uuid"] = new_uuid
-
-                else:
-                    logging.error("Failed to upload consented image to Google Drive.")
+                
+                # Return the UUID to the frontend
+                response_data["uuid"] = new_uuid
+                logger.info("Saved successfully.")
             except Exception as e:
-                logging.exception("Error saving consented image: %s", e)
-    elif consent:
-        logging.warning(
-            "Consent given, but image is a likely duplicate (score: %s). Skipping save.", highest_score
-        )
+                logger.exception("Failed to save consented image: %s", e)
 
     return response_data
 
-# Endpoint for deleting data
+
 @app.delete("/delete/{uuid}")
 async def delete_image_by_uuid(uuid: str):
     """
-    Deletes a user-uploaded image from Google Drive and FAISS by its UUID.
+    Deletes an image by UUID from Drive, DB, and RAM.
     """
-    global drive_service, faiss_index
-    if not drive_service or not faiss_index:
-        raise HTTPException(status_code=503, detail="Service is not available.")
+    global faiss_index
+    if not faiss_index:
+        raise HTTPException(status_code=503, detail="Service unavailable.")
     
     try:
-        logging.info("Attempting to delete file with UUID: %s", blur_str(uuid))
-        image_exists = remove_by_uuid(faiss_index, drive_service, uuid)
-        
-        if image_exists:
-            logging.info(f"Successfully deleted the file with UUID: %s", blur_str(uuid))
-            return {
-                "success": True,
-                "message": f"Successfully deleted image associated with UUID: {blur_str(uuid)}"
-            }
+        success = faiss_index.delete_image_by_uuid(uuid)
+        if success:
+            return {"success": True, "message": f"Deleted {uuid}"}
         else:
-            return {
-                "success": False,
-                "message": f"There is no image in the database with the provided UUID."
-            }
-
-    except HTTPException as e:
-        raise e
+            return {"success": False, "message": "UUID not found or delete failed."}
     except Exception as e:
-        logging.exception("An error occurred while deleting the image: %s", e)
-        raise HTTPException(status_code=500, detail="An internal server error occurred.")
+        logger.exception("Delete error: %s", e)
+        raise HTTPException(status_code=500, detail="Internal error.")
 
 
 @app.get("/gdrive-image/{file_id}")
 async def get_gdrive_image(file_id: str):
     global drive_service
     if not drive_service:
-        raise HTTPException(
-            status_code=503,
-            detail="Google Drive service is not available."
-        )
+        raise HTTPException(status_code=503, detail="Service unavailable.")
     try:
         image_bytes = get_image_bytes_by_id(drive_service, file_id)
         if image_bytes:
             return Response(content=image_bytes, media_type="image/jpeg")
         else:
-            raise HTTPException(
-                status_code=404,
-                detail="Image data not found in Google Drive."
-            )
+            raise HTTPException(status_code=404, detail="Image not found.")
     except Exception as e:
-        logging.exception("An error occurred retrieving GDrive file %s: %s", file_id, e)
-        raise HTTPException(status_code=500, detail="Internal server error.")
+        logger.exception("Proxy error: %s", e)
+        raise HTTPException(status_code=500, detail="Internal error.")
 
-# Root Endpoint (GET /)
 @app.get("/")
 async def read_root():
     return {
         "status": "online",
-        "message": "Visual Twin Search API is running. Please visit the frontend website to use the app.",
+        "message": "Visual Twin Search API is running.",
         "docs": f"{BASE_URL}/docs"
     }
 
-# Run the App
 if __name__ == "__main__":
-    uvicorn.run("app.main:app", host="127.0.0.1", port=8000, reload=True)
+    uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)

@@ -13,6 +13,7 @@ models:
 faiss:
   paths:
     index_path: "embeddings_store"
+  index_type: "flat"
 
 image:
   max_size: 1280

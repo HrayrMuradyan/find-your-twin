@@ -1,416 +1,434 @@
 from pathlib import Path
 import faiss
 import numpy as np
-import pandas as pd
 import logging
 from typing import Any, Dict, List, Optional, Tuple, Union
 import uuid
 import io
-import gc 
+import os
+import psycopg2
+from dotenv import load_dotenv
 from PIL import Image
+import concurrent.futures
+import json 
+from tqdm import tqdm
 
+# Add the project root to the path
 import sys
 script_dir = Path(__file__).parent
 PROJECT_ROOT = script_dir.parent
 sys.path.append(str(PROJECT_ROOT))
 
-from tqdm import tqdm
+# Import the helper functions
 from src.image import read_image
 from src.validation import validate_model
 from src.model import load_model, read_model_config
-from src.file import read_json, save_json
-from src.google_drive import upload_bytes_to_folder
+from src.google_drive import upload_bytes_to_folder, get_file_by_uuid, get_drive_service
 
 # Setup logger
 logger = logging.getLogger(__name__)
+load_dotenv()
 
 # Define common types
 ImagePath = Union[str, Path]
 ImageInput = Union[ImagePath, np.ndarray]
-Embedding = Union[np.ndarray, List[float]]
+
+# Global variables for workers
+worker_drive_service = None
+worker_folder_id = None
+worker_face_detector = None
+worker_embedder = None
+
+def worker_init(folder_id, face_model_path, embed_model_path):
+    """
+    Initialize a new worker
+    """
+    global worker_drive_service, worker_folder_id, worker_face_detector, worker_embedder
+    logging.getLogger('googleapiclient.discovery_cache').setLevel(logging.ERROR)
+    worker_drive_service = get_drive_service()
+    worker_folder_id = folder_id
+    
+    from src.validation import validate_model
+    from src.model import load_model, read_model_config
+    
+    if face_model_path and embed_model_path:
+        validate_model(face_model_path)
+        face_config = read_model_config(face_model_path)
+        worker_face_detector = load_model(face_config)
+        
+        validate_model(embed_model_path)
+        embed_config = read_model_config(embed_model_path)
+        worker_embedder = load_model(embed_config)
+
+def process_single_image_task(args):
+    """
+    Given one image, meta pair -> extract face, compute embeddings -> upload to drive -> return upload metadata
+    """
+    img_path, meta = args
+    global worker_drive_service, worker_folder_id, worker_face_detector, worker_embedder
+    
+    try:
+        img = read_image(img_path, return_numpy=False)
+        face = worker_face_detector.detect(img)
+        if face is None:
+            return False, f"No face detected in {img_path}"
+            
+        # Compute embedding (Already normalized by DeepFaceEmbedder)
+        embedding = worker_embedder.compute_embeddings(face)
+        
+        new_uuid = str(uuid.uuid4())
+        with io.BytesIO() as output:
+            img.save(output, format="JPEG")
+            image_bytes = output.getvalue()
+
+        drive_file_id = upload_bytes_to_folder(
+            service=worker_drive_service,
+            folder_id=worker_folder_id,
+            file_name=f"{new_uuid}.jpg",
+            file_bytes=image_bytes,
+            mime_type="image/jpeg",
+            uuid_str=new_uuid
+        )
+
+        if not drive_file_id:
+            return False, f"Drive upload failed for {img_path}"
+
+        return True, {
+            "source": meta.get('name', 'Unknown'),
+            "drive_file_id": drive_file_id,
+            "embedding": embedding.tolist()
+        }
+
+    except Exception as e:
+        return False, f"Error processing {img_path}: {str(e)}"
+
 
 class AutoFaissIndex:
     """
-    Manages a FAISS index for face embeddings.
-    Updated with pipeline methods for batch processing.
+    Manages a FAISS index backed by PostgreSQL (Supabase).
+    Uses IndexFlatIP (Inner Product) for Cosine Similarity.
     """
 
     def __init__(self,
-                 index_path: ImagePath = "embeddings_store",
                  face_detect_model: Optional[str] = None,
                  embeddings_model: Optional[str] = None,
                  drive_service: Optional[Any] = None,
                  drive_folder_id: Optional[str] = None):
         
-        if not isinstance(index_path, (str, Path)):
-            raise TypeError(f"index_path must be a string or Path. Got: {type(index_path)}")
-            
-        # Store Google Drive info
+        self.db_dsn = os.getenv("DB_CONNECTION_STRING")
+        if not self.db_dsn:
+            raise ValueError("DB_CONNECTION_STRING not found in environment variables.")
+        
         self.drive_service = drive_service
         self.drive_folder_id = drive_folder_id
 
-        # Setup the database files' paths
-        self.index_path = Path(index_path)
-        self.index_path.mkdir(parents=True, exist_ok=True)
+        self.face_detect_model_path = Path(PROJECT_ROOT) / face_detect_model if face_detect_model else None
+        self.embeddings_model_path = Path(PROJECT_ROOT) / embeddings_model if embeddings_model else None
+        
+        self.face_detector = None
+        self.embedder = None
+        self.face_detect_model_config = None
+        self.embeddings_model_config = None
 
-        self.index_file = self.index_path / "faiss_index.faiss"
-        self.emb_metadata_file = self.index_path / "emb_metadata.parquet"
-        self.index_metadata_file = self.index_path / "metadata.json"
+        self._init_db_connection()
+        self._load_or_create_index()
 
-        # Check if all necessary database files exist
-        database_necessary_files = [
-            self.index_file,
-            self.emb_metadata_file,
-            self.index_metadata_file
-        ]
-        database_files_exist = [f.exists() for f in database_necessary_files]
-
-        # If all exist, load the existing database
-        # If not, delete partial files and start from scratch
-        if all(database_files_exist):
-            logger.info(
-                "All database files exist at %s, loading...",
-                self.index_path.relative_to(PROJECT_ROOT)
-            )
-            self._load_existing()
-
-            self.face_detect_model_config = None
-            self.embeddings_model_config = None
-            self.face_detector = None
-            self.embedder = None
-
-            self._ensure_models_loaded()
-
-        else:
-            if any(database_files_exist):
-                for f in database_necessary_files:
-                    if f.exists(): f.unlink()
-
-            if not (face_detect_model and embeddings_model):
-                raise ValueError("Both face_detect_model and embeddings_model are required for new index.")
-
-            self.face_detect_model = Path(PROJECT_ROOT) / face_detect_model
-            self.embeddings_model = Path(PROJECT_ROOT) / embeddings_model
-            self.index_type = "flat"  
-            self.face_detector = None
-            self.embedder = None
-
-            # Validate and load model configs
-            validate_model(self.face_detect_model)
-            self.face_detect_model_config = read_model_config(self.face_detect_model)
-            validate_model(self.embeddings_model)
-            self.embeddings_model_config = read_model_config(self.embeddings_model)
-
-            self.dim = self.embeddings_model_config['parameters']['dim']
-            self.index = faiss.IndexIDMap(faiss.IndexFlatIP(self.dim))
-            
-            self.emb_metadata = pd.DataFrame({
-                "id": pd.Series(dtype="int"),
-                "gdrive_id": pd.Series(dtype="string")
-            })
-            self._save()
-            logging.info("New FAISS Index is created at: '%s'", self.index_path.relative_to(PROJECT_ROOT))
-            logging.info("FAISS Index successfuly loaded")
-
-    # -------------------------------------------------------------------------
-    #  PHASE 1: PROCESS LOCAL IMAGES 
-    # -------------------------------------------------------------------------
-    def process_local_to_parquet(self,
-                                 image_paths: List[str],
-                                 metadata_list: List[Dict],
-                                 output_file: Path,
-                                 save_threshold: int = 500):
+    def _init_db_connection(self):
         """
-        Detects a face and computes embeddings locally. 
-        Saves results (UUID + Embedding) to a Parquet file. 
+        Connect to the supabase database
         """
-        self._ensure_models_loaded()
-        
-        data_records = []
-        
-        logger.info("PHASE 1: Processing %s images locally...", len(image_paths))
-        
-        for i, img_path in enumerate(tqdm(image_paths, desc="PHASE 1 (Compute)")):
-            try:
-                # Read the image and detect face
-                img = read_image(img_path, return_numpy=False)
-                face = self.face_detector.detect(img)
-                
-                # Delete the image and free memory
-                del img 
-                
-                if not face:
-                    logging.warning(
-                        "No face found for the image at path: '%s', skipping...",
-                        img_path
-                    )
-                    continue
-                    
-                # Take the first face and calculate the embeddings
-                embedding = self.embedder.compute_embeddings(face)
-                
-                # Assign a new UUID
-                file_uuid = str(uuid.uuid4())
-                
-                # Store Data
-                # Convert embedding to list to store in Parquet/JSON safely
-                record = {
-                    "uuid": file_uuid,
-                    "local_path": str(img_path),
-                    "embedding": embedding.tolist(), 
-                    **metadata_list[i]
-                }
-
-                data_records.append(record)
-
-            except Exception as e:
-                logger.exception("Failed to process %s: %s", img_path, e)
-                continue
-            
-            # Save when number of records is higher than save threshold 
-            if len(data_records) >= save_threshold:
-                self._append_to_parquet(data_records, output_file)
-                data_records = []
-                gc.collect()
-
-        # Save the last batch
-        if data_records:
-            self._append_to_parquet(data_records, output_file)
-
-        if not output_file.exists():
-            logging.error("No images were processed. Something is wrong with the data directory you provided.")
-        else:
-            logger.info("PHASE 1 Complete. Intermediate data saved to %s", str(output_file))
-
-    def _append_to_parquet(self,
-                           data: List[Dict],
-                           filename: Path):
-        """Helper to append data to parquet file safely."""
-
-        df = pd.DataFrame(data)
-        if filename.is_file():
-            try:
-                existing_df = pd.read_parquet(filename)
-                combined = pd.concat([existing_df, df], ignore_index=True)
-                combined.to_parquet(filename, engine='fastparquet', compression='snappy')
-            except Exception as e:
-                logger.error("Error appending parquet: %s. Saving separate chunk.", e)
-                # Fallback if concatenation or reading fails
-                df.to_parquet(f"{filename}_{uuid.uuid4()}.parquet")
-        else:
-            df.to_parquet(filename, engine='fastparquet', compression='snappy')
-
-    # -------------------------------------------------------------------------
-    #  PHASE 3: BUILD INDEX FROM PROCESSED DATA
-    # -------------------------------------------------------------------------
-    def build_index_from_parquet(self, parquet_file: Path):
-        """
-        Loads the processed parquet (which now contains 'gdrive_id' from PHASE 2) 
-        and adds vectors to FAISS.
-        """
-        if not parquet_file.is_file():
-            raise FileNotFoundError(parquet_file)
-            
-        logger.info("PHASE 3: Loading processed data...")
-        df = pd.read_parquet(parquet_file)
-        
-        # Filter rows that successfully uploaded
-        if 'gdrive_id' not in df.columns:
-            raise ValueError("Parquet file missing 'gdrive_id'. Did PHASE 2 finish?")
-            
-        initial_len = len(df)
-        df = df.dropna(subset=['gdrive_id'])
-        logger.info(
-            "Found %s ready items (out of %s processed).",
-            len(df),
-            initial_len
-        )
-        
-        # Convert the embeddings to a numpy array of shape (n, self.dim)
-        embeddings = np.array(df['embedding'].tolist(), dtype=np.float32)
-        
-        # Prepare Metadata (Drop internal columns)
-        metadata_list = []
-        keys_to_exclude = ['embedding', 'local_path', 'uuid']
-        
-        # Convert DataFrame to list of dicts for iteration
-        records = df.to_dict(orient='records')
-        
-        for row in records:
-            meta = {k: v for k, v in row.items() if k not in keys_to_exclude}
-            metadata_list.append(meta)
-            
-        logger.info("PHASE 3: Adding %s vectors to FAISS...", len(embeddings))
-        self.add(embeddings, metadata_list)
-
-    # -------------------------------------------------------------------------
-    #  STANDARD METHODS (Preserved)
-    # -------------------------------------------------------------------------
-    def add(self,
-            embeddings: List[Embedding] | np.ndarray,
-            metadata: List[Dict[str, Any]]):
-        
-        if not isinstance(embeddings, (list, np.ndarray)):
-            raise TypeError(f"embeddings must be a list or np.ndarray.")
-        
-        embeddings_np = np.array(embeddings, dtype=np.float32)
-
-        # If it's a single embeddings convert (self.dim,) to (1, self.dim)
-        if embeddings_np.ndim == 1:
-            embeddings_np = embeddings_np.reshape(1, -1)
-
-        n_new = embeddings_np.shape[0]
-        if n_new == 0:
-            return
-
-        if self.emb_metadata.empty:
-            start_id = 0
-        else:
-            start_id = int(self.emb_metadata['id'].max()) + 1
-
-        ids = list(range(start_id, start_id + n_new))
-        ids_array = np.array(ids, dtype=np.int64)
-
-        self.index.add_with_ids(embeddings_np, ids_array)
-        
-        df = pd.DataFrame(metadata, copy=False)
-        df.insert(0, "id", ids_array.astype("int32"))
-
-        self.emb_metadata = pd.concat([self.emb_metadata, df], ignore_index=True)
-
-        self._save()
-
-    def search_query(self,
-                     query: Embedding | np.ndarray,
-                     k: int = 5,
-                     return_metadata: bool = True):
-        
-        query_np = np.array(query, dtype=np.float32)
-
-        # Convert the query to (1, self.dim) if it's a single query
-        if query_np.ndim == 1:
-            query_np = query_np.reshape(1, -1)
-
-        distances, ids = self.index.search(query_np, k)
-        results = None
-
-        if return_metadata:
-            results = []
-            for row_ids in ids:
-                valid_ids = [idx for idx in row_ids if idx != -1]
-                if valid_ids:
-                    results.append(
-                        self.emb_metadata[self.emb_metadata['id'].isin(valid_ids)]
-                    )
-                else:
-                    results.append(pd.DataFrame(columns=self.emb_metadata.columns))
-        return distances, ids, results
-
-    def search_image(self,
-                     image: ImageInput,
-                     k: int = 5,
-                     return_metadata: bool = True,
-                     return_face: bool = False):
-        
-        self._ensure_models_loaded()
-        if isinstance(image, (str, Path)):
-            image_arr = read_image(image)
-        else:
-            image_arr = image
-        
-        face = self.face_detector.detect(image_arr)
-
-        if face is None:
-            raise ValueError
-        
-        query = self.embedder.compute_embeddings(face)
-        distances, ids, results = self.search_query(query, k, return_metadata)
-        
-        if return_face:
-            return distances, ids, results, face
-        
-        return distances, ids, results, None
-
-    def add_image(self, image: ImageInput, metadata: Dict[str, Any]):
-        """Single image upload helper."""
-        self._ensure_models_loaded()
-
-        if not (self.drive_service and self.drive_folder_id):
-             raise ValueError("Google Drive service not configured.")
-        
-        if isinstance(image, (str, Path)):
-            image_arr = read_image(image)
-        else:
-            image_arr = image
-
-        new_uuid = str(uuid.uuid4())
         try:
-            pil_image = Image.fromarray(image_arr)
-            with io.BytesIO() as output:
-                pil_image.save(output, format="JPEG")
-                image_bytes = output.getvalue()
-            
-            uploaded_file_id = upload_bytes_to_folder(
-                service=self.drive_service,
-                folder_id=self.drive_folder_id,
-                file_name=f"{new_uuid}.jpg",
-                file_bytes=image_bytes,
-                mime_type="image/jpeg",
-                uuid_str=new_uuid
-            )
-            if not uploaded_file_id:
-                raise ValueError("Failed to upload.")
-        except Exception:
-            logger.exception("Upload failed")
+            self.conn = psycopg2.connect(self.db_dsn)
+            self.conn.autocommit = True
+            logger.info("Connected to PostgreSQL.")
+        except Exception as e:
+            logger.exception("Failed to connect to database: %s", e)
             raise
 
+    def _load_or_create_index(self):
+        """
+        Load existing tables or create new
+        """
+        cursor = self.conn.cursor()
+        
+        # Get the row that has the vector dimension record
+        cursor.execute("SELECT value FROM index_metadata WHERE key='dim'")
+        row = cursor.fetchone()
+        
+        if row:
+            self.dim = int(row[0])
+            logger.info(f"Configuration loaded: Dimension={self.dim}")
+        else:
+            logger.error("Vector dimension under key 'dim' is not found. Can't initialize FAISS without it")
+            raise KeyError
+
+        # Create a FAISS Index
+        self.index = faiss.IndexIDMap(faiss.IndexFlatIP(self.dim))
+
+        logger.info("Downloading vectors from Postgres...")
+        cursor.execute("SELECT id, embedding FROM face_data")
+        rows = cursor.fetchall()
+
+        # 0 -> id, 1 -> embedding
+        if rows:
+            # Convert ids to a numpy array for populating the FAISS
+            ids = np.array([row[0] for row in rows], dtype=np.int64)
+            
+            embeddings_list = []
+            for i, row in rows:
+                emb_raw = row[1]
+                if isinstance(emb_raw, str):
+                    emb_list = json.loads(emb_raw)
+                elif isinstance(emb_raw, list):
+                    emb_list = emb_raw
+                
+                # If the embedding is not a string or list, something is wrong. Skip that row
+                else:
+                    logger.warning(
+                        "Unknown embedding format: %s. Index = %s",
+                        type(emb_raw),
+                        i
+                    )
+                    continue
+
+                embeddings_list.append(emb_list)
+
+            embeddings = np.array(embeddings_list, dtype=np.float32)
+            
+            # For safety, normalize the embeddings
+            # Although the embeddings class has to do that
+            faiss.normalize_L2(embeddings)
+            
+            if len(ids) > 0:
+                self.index.add_with_ids(embeddings, ids)
+                logger.info("Rebuilt FAISS index with %s vectors.", self.index.ntotal)
+            else:
+                logger.info("No valid vectors found to add.")
+        else:
+            logger.info("Database is empty. Initialized empty index.")
+
+        cursor.close()
+
+    def process_and_upload_batch(self,
+                                 image_paths: List[str],
+                                 metadata_list: List[Dict],
+                                 max_workers: int = 4):
+        
+        if not self.drive_folder_id:
+            raise ValueError("Drive folder ID not configured.")
+
+        logger.info("Starting Multiprocess Batch Upload (%s workers)...", max_workers)
+        
+        tasks = list(zip(image_paths, metadata_list))
+        cursor = self.conn.cursor()
+        
+        with concurrent.futures.ProcessPoolExecutor(
+            max_workers=max_workers,
+            initializer=worker_init,
+            initargs=(self.drive_folder_id, self.face_detect_model_path, self.embeddings_model_path)
+        ) as executor:
+            
+            # Define the tasks and the function that handles those tasks
+            future_to_file = {
+                executor.submit(process_single_image_task, task): task[0] 
+                for task in tasks
+            }
+            
+            for future in tqdm(concurrent.futures.as_completed(future_to_file), total=len(tasks), desc="Processing"):
+                img_path = future_to_file[future]
+                try:
+                    success, result = future.result()
+                    if success:
+                        cursor.execute("""
+                            INSERT INTO face_data (source, drive_file_id, embedding)
+                            VALUES (%s, %s, %s)
+                            RETURNING id;
+                        """, (result['source'], result['drive_file_id'], result['embedding']))
+                        new_db_id = cursor.fetchone()[0]
+                        
+                        # Update RAM
+                        vec_np = np.array([result['embedding']], dtype=np.float32)
+
+                        id_np = np.array([new_db_id], dtype=np.int64)
+                        self.index.add_with_ids(vec_np, id_np)
+                    else:
+                        logger.warning("Worker failed for %s: %s", img_path, result)
+                except Exception as e:
+                    logger.exception("Exception collecting result for %s: %s", img_path, e)
+
+        cursor.close()
+        logger.info("Batch processing complete.")
+
+    def search_image(self, image: ImageInput, k: int = 5):
+        """
+        Search an image in the index
+        """
+        self._ensure_models_loaded()
+        
+        if isinstance(image, (str, Path)):
+            image_arr = read_image(image)
+        else:
+            image_arr = image
+        
         face = self.face_detector.detect(image_arr)
-        if not face:
-            return
+        if face is None:
+            logger.warning("No face detected in query image.")
+            return [], [], []
         
-        new_metadata = metadata.copy()
-        new_metadata['gdrive_id'] = uploaded_file_id
-
-        self.add(embeddings=self.embedder.compute_embeddings(face), metadata=new_metadata)
-
-    def _save(self):
-        faiss.write_index(self.index, str(self.index_file))
-        for col in self.emb_metadata.select_dtypes(include=["object"]).columns:
-            self.emb_metadata[col] = self.emb_metadata[col].astype(str)
-
-        self.emb_metadata.to_parquet(self.emb_metadata_file, index=False, engine="fastparquet")
+        query_vector = self.embedder.compute_embeddings(face)
         
-        meta = {
-            "index_type": self.index_type, "dim": self.dim,
-            "models": {
-                "face_detect_model": self.face_detect_model.relative_to(PROJECT_ROOT).as_posix(),
-                "embeddings_model": self.embeddings_model.relative_to(PROJECT_ROOT).as_posix()
-            },
-            "vector_count": self.index.ntotal,
-        }
-        save_json(meta, self.index_metadata_file)
+        # FAISS Search
+        query_np = np.array([query_vector], dtype=np.float32)
+        
+        distances, indices = self.index.search(query_np, k)
+        
+        found_ids = [idx for idx in indices[0] if idx != -1]
+        results = []
+        
+        if found_ids:
+            py_ids = tuple(int(x) for x in found_ids)
+            cursor = self.conn.cursor()
 
-    def _load_existing(self):
-        self.index = faiss.read_index(str(self.index_file))
-        self.emb_metadata = pd.read_parquet(self.emb_metadata_file)
-        index_metadata = read_json(self.index_metadata_file)
-        self.dim = index_metadata["dim"]
-        self.index_type = index_metadata["index_type"]
-        self.face_detect_model = PROJECT_ROOT / Path(index_metadata["models"]["face_detect_model"])
-        self.embeddings_model = PROJECT_ROOT / Path(index_metadata["models"]["embeddings_model"])
+            # Get the metadata from the postgresql matching the similiar IDs fetched from FAISS
+            query = "SELECT id, source, drive_file_id FROM face_data WHERE id IN %s"
+            cursor.execute(query, (py_ids,))
+            rows = cursor.fetchall()
+            cursor.close()
+            
+            row_map = {row[0]: {'name': row[1], 'drive_id': row[2]} for row in rows}
+            
+            for idx, dist in zip(indices[0], distances[0]):
+                if idx != -1 and idx in row_map:
+                    data = row_map[idx]
+                    results.append({
+                        'id': idx,
+                        'score': float(dist),
+                        'name': data['name'],
+                        'drive_link': f"https://drive.google.com/uc?id={data['drive_id']}",
+                        'drive_id': data['drive_id']
+                    })
+
+        return distances, indices, results
+
+    def add_image(self, image: ImageInput, metadata: Dict[str, Any]):
+        """
+        Upload an image to Drive and PostgreSQL
+        """
+        self._ensure_models_loaded()
+        if not (self.drive_service and self.drive_folder_id):
+             raise ValueError("Google Drive service not configured")
+
+        if isinstance(image, (str, Path)):
+            image_arr = read_image(image)
+        else:
+            image_arr = image
+
+        face = self.face_detector.detect(image_arr)
+        if face is None:
+            raise ValueError("No face detected.")
+        
+        embedding = self.embedder.compute_embeddings(face)
+
+        # Upload Drive
+        new_uuid = str(uuid.uuid4())
+        pil_image = Image.fromarray(image_arr)
+        with io.BytesIO() as output:
+            pil_image.save(output, format="JPEG")
+            image_bytes = output.getvalue()
+        
+        drive_id = upload_bytes_to_folder(
+            service=self.drive_service,
+            folder_id=self.drive_folder_id,
+            file_name=f"{new_uuid}.jpg",
+            file_bytes=image_bytes,
+            mime_type="image/jpeg",
+            uuid_str=new_uuid
+        )
+
+        if not drive_id:
+            raise ValueError("Drive upload failed")
+
+        # Insert DB
+        source_name = metadata.get('name', 'Unknown')
+        cursor = self.conn.cursor()
+        try:
+            cursor.execute("""
+                INSERT INTO face_data (source, drive_file_id, embedding)
+                VALUES (%s, %s, %s)
+                RETURNING id;
+            """, (source_name, drive_id, embedding.tolist()))
+            
+            new_id = cursor.fetchone()[0]
+            
+            # Update RAM
+            vec_np = np.array([embedding], dtype=np.float32)
+            id_np = np.array([new_id], dtype=np.int64)
+            self.index.add_with_ids(vec_np, id_np)
+            
+            logger.info("Added face: %s (ID: %s)", source_name, new_id)
+            return new_uuid
+        except Exception as e:
+            logger.error("DB Insert failed: %s", e)
+            raise e
+        finally:
+            cursor.close()
+
+    def delete_image_by_uuid(self, uuid_str: str) -> bool:
+        """
+        Delete an image by uuid
+        """
+        if not self.drive_service:
+            return False
+
+        file_info = get_file_by_uuid(self.drive_service, uuid_str)
+        if not file_info:
+            logger.warning("UUID %s not found in Drive", uuid_str)
+            return False
+        
+        drive_file_id = file_info.get('id')
+
+        cursor = self.conn.cursor()
+        try:
+            cursor.execute("SELECT id FROM face_data WHERE drive_file_id = %s", (drive_file_id,))
+            row = cursor.fetchone()
+            
+            if not row:
+                logger.warning("Drive ID %s not found in Database", drive_file_id)
+                return False
+            
+            db_id = row[0]
+
+            self.index.remove_ids(np.array([db_id], dtype=np.int64))
+            cursor.execute("DELETE FROM face_data WHERE id = %s", (db_id,))
+            self.drive_service.files().delete(fileId=drive_file_id).execute()
+            
+            logger.info("Deleted face UUID: %s (DB ID: %s)", uuid_str, db_id)
+            return True
+
+        except Exception as e:
+            logger.exception("Error deleting %s: %s", uuid_str, e)
+            return False
+        finally:
+            cursor.close()
 
     def _ensure_models_loaded(self):
+        """
+        Ensure the models are loaded
+        """
         if self.face_detector and self.embedder:
             return
         
         logger.info("Loading models...")
+        if not self.face_detect_model_path or not self.embeddings_model_path:
+             raise ValueError("Model paths not provided in init.")
+
         if self.face_detect_model_config is None:
-            validate_model(self.face_detect_model)
-            self.face_detect_model_config = read_model_config(self.face_detect_model)
+            validate_model(self.face_detect_model_path)
+            self.face_detect_model_config = read_model_config(self.face_detect_model_path)
             
         if self.embeddings_model_config is None:
-            validate_model(self.embeddings_model)
-            self.embeddings_model_config = read_model_config(self.embeddings_model)
+            validate_model(self.embeddings_model_path)
+            self.embeddings_model_config = read_model_config(self.embeddings_model_path)
 
         self.face_detector = load_model(self.face_detect_model_config)
         self.embedder = load_model(self.embeddings_model_config)
