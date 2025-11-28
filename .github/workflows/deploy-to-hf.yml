@@ -9,27 +9,35 @@ jobs:
   sync-to-hub:
     runs-on: ubuntu-latest
     steps:
-      # Checkout the branch
+      # Checkout the GitHub repository
       - uses: actions/checkout@v4
         with:
           fetch-depth: 1
           lfs: true
 
-      # Clone the Hugging Face Space to a temporary directory
+      # Set up SSH Agent and Trust Hugging Face
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.HF_SPACE }}
+      
+      - name: Trust Hugging Face Host
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan hf.co >> ~/.ssh/known_hosts
+
+      # Clone the HF Space
       - name: Clone Hugging Face Space
         env:
-          HF_TOKEN: ${{ secrets.HF_TOKEN }}
-          HF_USERNAME: "HrayrMuradyan" 
+          HF_USERNAME: "HrayrMuradyan"
           HF_SPACE_NAME: "find-your-twin"
         run: |
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git config --global user.name "GitHub Actions"
           
-          git config --global credential.helper store
-          echo "https://$HF_USERNAME:$HF_TOKEN@huggingface.co" > ~/.git-credentials
-          
-          git clone https://huggingface.co/spaces/$HF_USERNAME/$HF_SPACE_NAME hf_sync
+          git clone git@hf.co:spaces/$HF_USERNAME/$HF_SPACE_NAME hf_sync
 
+      # Copy files
       - name: Copy specific files
         run: |
           cp pyproject.toml hf_sync/
@@ -40,26 +48,21 @@ jobs:
           cp requirements_docker.txt hf_sync/
           cp Dockerfile hf_sync/
 
-      # Check if there are changes and push to hugging face
-      # Check if there are changes and push to hugging face
-      - name: Push to Hugging Face
+      # Check if there is a change in the files and push changes
+      - name: Push to Hub
         env:
-          HF_TOKEN: ${{ secrets.HF_TOKEN }}
-          HF_USERNAME: "HrayrMuradyan" 
+          HF_USERNAME: "HrayrMuradyan"
           HF_SPACE_NAME: "find-your-twin"
         run: |
           cd hf_sync
           
           if [[ -n $(git status -s) ]]; then
-            
             git add .
             git commit -m "Sync from GitHub: ${{ github.sha }}"
-            
-            git remote set-url origin https://$HF_USERNAME:$HF_TOKEN@huggingface.co/spaces/$HF_USERNAME/$HF_SPACE_NAME
             
             git push origin main
             
             echo "Successfully pushed to Hugging Face."
           else
-            echo "No changes detected in the specific files. Skipping push."
+            echo "No changes detected. Skipping push."
           fi
