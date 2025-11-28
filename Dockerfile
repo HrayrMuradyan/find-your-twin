@@ -20,7 +20,6 @@ RUN apt-get update && apt-get install -y \
 COPY pyproject.toml /app/pyproject.toml
 COPY src /app/src
 COPY models /app/models
-COPY embeddings_store /app/embeddings_store
 COPY configs /app/configs
 COPY app /app/app
 
