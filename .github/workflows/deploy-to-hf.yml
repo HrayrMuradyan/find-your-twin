@@ -1,0 +1,55 @@
+name: Push to HuggingFace
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  sync-to-hub:
+    runs-on: ubuntu-latest
+    steps:
+      # Checkout the branch
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          lfs: true
+
+      # Clone the Hugging Face Space to a temporary directory
+      - name: Clone Hugging Face Space
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_USERNAME: "HrayrMuradyan" 
+          HF_SPACE_NAME: "find-your-twin"
+        run: |
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global user.name "GitHub Actions"
+          
+          git clone https://$HF_USERNAME:$HF_TOKEN@huggingface.co/spaces/$HF_USERNAME/$HF_SPACE_NAME hf_sync
+
+      - name: Copy specific files
+        run: |
+          cp pyproject.toml hf_sync/
+          cp -r src/ hf_sync/
+          cp -r models/ hf_sync/
+          cp -r configs/ hf_sync/
+          cp -r app/ hf_sync/
+          cp requirements_docker.txt hf_sync/
+          cp Dockerfile hf_sync/
+
+      # Check if there are changes and push to hugging face
+      - name: Push to Hugging Face
+        run: |
+          cd hf_sync
+          
+          if [[ -n $(git status -s) ]]; then
+            git add .
+            git commit -m "Sync from GitHub: ${{ github.sha }}"
+            git push
+            echo "Successfully pushed to Hugging Face."
+          else
+            echo "No changes detected in the specific files. Skipping push."
+          fi
+          
+
+      
