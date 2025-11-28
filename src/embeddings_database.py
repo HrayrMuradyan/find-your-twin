@@ -157,7 +157,7 @@ class AutoFaissIndex:
         
         if row:
             self.dim = int(row[0])
-            logger.info(f"Configuration loaded: Dimension={self.dim}")
+            logger.info(f"Configuration loaded: Vector Dimension={self.dim}")
         else:
             logger.error("Vector dimension under key 'dim' is not found. Can't initialize FAISS without it")
             raise KeyError
@@ -168,6 +168,7 @@ class AutoFaissIndex:
         logger.info("Downloading vectors from Postgres...")
         cursor.execute("SELECT id, embedding FROM face_data")
         rows = cursor.fetchall()
+        logger.info("Fetched %s rows from the metadata", len(rows))
 
         # 0 -> id, 1 -> embedding
         if rows:
@@ -175,10 +176,13 @@ class AutoFaissIndex:
             ids = np.array([row[0] for row in rows], dtype=np.int64)
             
             embeddings_list = []
-            for i, row in rows:
+            for i, row in enumerate(rows):
                 emb_raw = row[1]
                 if isinstance(emb_raw, str):
-                    emb_list = json.loads(emb_raw)
+                    try:
+                        emb_list = json.loads(emb_raw)
+                    except Exception:
+                        raise ValueError
                 elif isinstance(emb_raw, list):
                     emb_list = emb_raw
                 
