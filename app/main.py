@@ -140,7 +140,6 @@ async def search_image(
     image = resize_image(image, IMAGE_MAX_SIZE)
     img_array = np.array(image)
     
-    # Search
     try:
         # We request 3 values: distances, indices, and the list of result dicts
         similar_images = search_client.search_image(img_array, k=K_TO_SEARCH)
