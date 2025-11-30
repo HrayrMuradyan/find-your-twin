@@ -34,7 +34,11 @@
             
             <div class="hero-section">
                 <h1 class="main-title">Find Your Visual Twin</h1>
-                <p class="main-subtitle">Upload an image to query our FAISS-powered vector database and discover the most similar results from our collection.</p>
+                <p class="main-subtitle">Ever thought about who might look like you? Upload an image and our tool will quickly browse a huge gallery to find your top matches!</p>
+
+                <p id="db-stats-container" class="db-stats hidden">
+                    Database size:<span id="db-count-number">...</span>faces
+                </p>
             </div>
 
             <div id="upload-area">
@@ -114,7 +118,7 @@
         <section id="manage-data-content" class="tab-content hidden">
             <div class="info-box manage-data-container animate-on-scroll">
                 <h2>Manage Your Data</h2>
-                <p>The app respects your Right to be Forgotten. After you hit the "Search" button and provide consent, the app creates a unique ID (UUID) for your uploaded image. You can use this ID at any time to permanently delete your image from the app's database.</p>
+                <p>The app let's you have full control over the images you upload. After you hit the "Search" button and provide consent, the app creates a unique ID (UUID) for your uploaded image. You can use this ID at any time to permanently delete your image from the app's database.</p>
 
                 <div class="card delete-form-card">
                     <h4>Delete Your Uploaded Image</h4>
@@ -171,9 +175,9 @@
                     <div class="how-it-works-grid">
                         <ol class="modern-list">
                             <li class="animate-on-scroll"><span>1</span><div><strong>Upload & Resize:</strong> You upload an image, which is instantly resized to 1280px for fast processing.</div></li>
-                            <li class="animate-on-scroll"><span>2</span><div><strong>Face Detection:</strong> A MediaPipe model scans the image to find and extract the primary face.</div></li>
+                            <li class="animate-on-scroll"><span>2</span><div><strong>Face Detection:</strong> A face detection model scans the image to find and extract the primary face.</div></li>
                             <li class="animate-on-scroll"><span>3</span><div><strong>Embedding:</strong> The DeepFace model converts the cropped face into a 512-dimension vector (an "embedding").</div></li>
-                            <li class="animate-on-scroll"><span>4</span><div><strong>FAISS Search:</strong> This new vector is queried against a FAISS index containing millions of pre-computed vectors.</div></li>
+                            <li class="animate-on-scroll"><span>4</span><div><strong>FAISS Search:</strong> This new vector is queried against a FAISS index containing a large database of pre-computed vectors.</div></li>
                             <li class="animate-on-scroll"><span>5</span><div><strong>Results:</strong> The system finds the closest vectors in the database and returns the corresponding images.</div></li>
                         </ol>
                         
@@ -184,11 +188,11 @@
                 <section class="about-section about-section-white">
                     <h3 class="about-section-title animate-on-scroll">Privacy First</h3>
                     <div class="privacy-highlight-box animate-on-scroll">
-                        <p>Your trust is our priority. We handle your data with care:</p>
+                        <p>The app handles your data with care:</p>
                         <ul>
                             <li>Your uploaded image is processed in memory and never saved, unless you give explicit consent.</li>
                             <li>No personal information (like your IP address) is saved alongside with your image.</li>
-                            <li>Consented images are stored on secure Google Drive servers with no outside permission.</li>
+                            <li>Consented images are stored on secure Google Drive servers with no outside access.</li>
                             <li>Any image uploaded to the website can be deleted using a unique identifier UUID which is assigned after you do search. <a href="#" class="about-privacy-link">Learn more here.</a></li>
                         </ul>
                     </div>
@@ -212,6 +216,7 @@
                                 <li><strong>FAISS:</strong> Vector similarity search.</li>
                                 <li><strong>DeepFace:</strong> Facial embedding model.</li>
                                 <li><strong>Google Drive API:</strong> Image storage.</li>
+                                <li><strong>Supabase (PostgreSQL):</strong> Metadata and embeddings storage.</li>
                             </ul>
                         </div>
                     </div>
@@ -223,12 +228,12 @@
                             <span>HM</span> </div>
                         <div class="developer-info">
                             <h4>Hrayr Muradyan</h4>
-                            <p>Full-Stack Developer & AI Enthusiast</p>
+                            <p>Machine Learning Engineer & Data Scientist</p>
                             <div class="social-links">
-                                <a href="#" class="social-icon-link" title="GitHub">
+                                <a href="https://github.com/HrayrMuradyan" class="social-icon-link" title="GitHub">
                                     <img src="https://img.icons8.com/material-outlined/48/000000/github.png" alt="GitHub"/>
                                 </a>
-                                <a href="#" class="social-icon-link" title="LinkedIn">
+                                <a href="https://www.linkedin.com/in/hrayr-muradyan/" class="social-icon-link" title="LinkedIn">
                                     <img src="https://img.icons8.com/material-outlined/48/000000/linkedin.png" alt="LinkedIn"/>
                                 </a>
                             </div>
