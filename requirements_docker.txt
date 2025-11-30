@@ -21,4 +21,5 @@ fastparquet==2024.11.0
 python-json-logger
 onnxruntime
 psycopg2-binary==2.9.11
+pyzmq==27.1.0
 

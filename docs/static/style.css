@@ -92,12 +92,78 @@ body {
 .main-subtitle { 
     font-size: 1.15rem; 
     color: var(--text-color-light); 
-    max-width: 600px; 
+    max-width: 650px; 
     margin: 0 auto; 
 }
 
+.db-stats {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+
+    background: #ffffff;
+    
+    border: 3px solid rgba(0, 83, 128, 0.05);
+    
+    padding: 0.8rem 2.2rem;
+    border-radius: 50px; 
+    margin-top: 2rem;
+    
+    color: var(--text-color-light); 
+    font-size: 1.3rem;
+    font-weight: 500;
+    
+    animation: fadeInUp 1s ease-out;
+}
+
+.db-stats i {
+    font-size: 1.6rem;
+    color: var(--match-orange);
+    filter: drop-shadow(0 2px 4px rgba(253, 126, 20, 0.2));
+}
+
+#db-count-number {
+    font-size: 1.8rem;
+    font-weight: 700;
+    line-height: 1;
+    margin-left: 2px;
+    
+    /* Use the Primary Gradient from your theme variables */
+    background: var(--primary-gradient); 
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    
+    display: inline-block;
+}
+
+/* Entrance Animation */
+@keyframes fadeInUp {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* The Pop Animation with Orange Flash */
+@keyframes countPop {
+    0% { 
+        transform: scale(1); 
+    }
+    50% { 
+        transform: scale(1.2); 
+        filter: brightness(1.1);
+        
+        -webkit-text-fill-color: var(--match-orange);
+        color: var(--match-orange);
+    }
+    100% { 
+        transform: scale(1); 
+    }
+}
+
+.count-pop {
+    animation: countPop 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
 /* --- Uploader --- */
-#upload-area { margin: 2rem 0; }
 #drop-zone {
     border: 2px dashed var(--border-color);
     border-radius: var(--border-radius);
@@ -648,7 +714,7 @@ body {
 .developer-info h4 { font-size: 1.3rem; font-weight: 600; color: var(--text-color); margin: 0; }
 .developer-info p { font-size: 1rem; color: var(--text-color-light); margin: 0.25rem 0 1rem 0; }
 .developer-card .social-links { margin-bottom: 0; }
-.social-icon-link { text-decoration: none; margin: 0 0.75rem; display: inline-block; }
+.social-icon-link { text-decoration: none; margin: 0 0.75rem 0 0; display: inline-block; }
 .social-icon-link img {
     width: 28px; height: 28px;
     opacity: 0.6;
@@ -792,7 +858,7 @@ body {
 .delete-form-subtext {
     font-size: 0.95rem !important;
     color: var(--text-color-light);
-    margin: 0 0 1.5rem 0 !important;
+    margin: 2.5rem 0 1.5rem 0 !important;
     max-width: 100% !important;
 }
 

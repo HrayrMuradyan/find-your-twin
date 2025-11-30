@@ -1,7 +1,7 @@
 from pathlib import Path
-import faiss
 import numpy as np
 import logging
+import zmq
 from typing import Any, Dict, List, Optional, Tuple, Union
 import uuid
 import io
@@ -44,7 +44,6 @@ def worker_init(folder_id, face_model_path, embed_model_path):
     Initialize a new worker
     """
     global worker_drive_service, worker_folder_id, worker_face_detector, worker_embedder
-    logging.getLogger('googleapiclient.discovery_cache').setLevel(logging.ERROR)
     worker_drive_service = get_drive_service()
     worker_folder_id = folder_id
     
@@ -63,6 +62,12 @@ def worker_init(folder_id, face_model_path, embed_model_path):
 def process_single_image_task(args):
     """
     Given one image, meta pair -> extract face, compute embeddings -> upload to drive -> return upload metadata
+
+    If success:
+        Returns True, {"source": ..., "drive_file_id": ..., "embedding": ...}
+    
+    If fail:
+        Return False, Message
     """
     img_path, meta = args
     global worker_drive_service, worker_folder_id, worker_face_detector, worker_embedder
@@ -103,10 +108,9 @@ def process_single_image_task(args):
         return False, f"Error processing {img_path}: {str(e)}"
 
 
-class AutoFaissIndex:
+class InferenceClient:
     """
-    Manages a FAISS index backed by PostgreSQL (Supabase).
-    Uses IndexFlatIP (Inner Product) for Cosine Similarity.
+    Inference Service
     """
 
     def __init__(self,
@@ -131,87 +135,35 @@ class AutoFaissIndex:
         self.embeddings_model_config = None
 
         self._init_db_connection()
-        self._load_or_create_index()
+        
+        # Setup ZeroMQ
+        logger.info("Connecting to the FAISS Search Service")
+        self.context = zmq.Context()
+        self.socket = self.context.socket(zmq.REQ)
+        self.socket.connect("tcp://127.0.0.1:5555")
 
-    def _init_db_connection(self):
+    def get_index_count(self) -> int:
         """
-        Connect to the supabase database
+        Ask the Sidecar for the total number of vectors.
         """
         try:
-            self.conn = psycopg2.connect(self.db_dsn)
-            self.conn.autocommit = True
-            logger.info("Connected to PostgreSQL.")
+            # We use a short timeout so the homepage doesn't hang if ZMQ is busy
+            self.socket.setsockopt(zmq.RCVTIMEO, 2000)
+            self.socket.setsockopt(zmq.SNDTIMEO, 2000)
+            
+            self.socket.send_pyobj({"command": "health"})
+            response = self.socket.recv_pyobj()
+            
+            # Reset timeouts to default (safe practice)
+            self.socket.setsockopt(zmq.RCVTIMEO, 5000) 
+            self.socket.setsockopt(zmq.SNDTIMEO, 5000)
+
+            if response.get("status") == "ok":
+                return response.get("count", 0)
+            return 0
         except Exception as e:
-            logger.exception("Failed to connect to database: %s", e)
-            raise
-
-    def _load_or_create_index(self):
-        """
-        Load existing tables or create new
-        """
-        cursor = self.conn.cursor()
-        
-        # Get the row that has the vector dimension record
-        cursor.execute("SELECT value FROM index_metadata WHERE key='dim'")
-        row = cursor.fetchone()
-        
-        if row:
-            self.dim = int(row[0])
-            logger.info(f"Configuration loaded: Vector Dimension={self.dim}")
-        else:
-            logger.error("Vector dimension under key 'dim' is not found. Can't initialize FAISS without it")
-            raise KeyError
-
-        # Create a FAISS Index
-        self.index = faiss.IndexIDMap(faiss.IndexFlatIP(self.dim))
-
-        logger.info("Downloading vectors from Postgres...")
-        cursor.execute("SELECT id, embedding FROM face_data")
-        rows = cursor.fetchall()
-        logger.info("Fetched %s rows from the metadata", len(rows))
-
-        # 0 -> id, 1 -> embedding
-        if rows:
-            # Convert ids to a numpy array for populating the FAISS
-            ids = np.array([row[0] for row in rows], dtype=np.int64)
-            
-            embeddings_list = []
-            for i, row in enumerate(rows):
-                emb_raw = row[1]
-                if isinstance(emb_raw, str):
-                    try:
-                        emb_list = json.loads(emb_raw)
-                    except Exception:
-                        raise ValueError
-                elif isinstance(emb_raw, list):
-                    emb_list = emb_raw
-                
-                # If the embedding is not a string or list, something is wrong. Skip that row
-                else:
-                    logger.warning(
-                        "Unknown embedding format: %s. Index = %s",
-                        type(emb_raw),
-                        i
-                    )
-                    continue
-
-                embeddings_list.append(emb_list)
-
-            embeddings = np.array(embeddings_list, dtype=np.float32)
-            
-            # For safety, normalize the embeddings
-            # Although the embeddings class has to do that
-            faiss.normalize_L2(embeddings)
-            
-            if len(ids) > 0:
-                self.index.add_with_ids(embeddings, ids)
-                logger.info("Rebuilt FAISS index with %s vectors.", self.index.ntotal)
-            else:
-                logger.info("No valid vectors found to add.")
-        else:
-            logger.info("Database is empty. Initialized empty index.")
-
-        cursor.close()
+            logger.warning(f"Could not get stats from Sidecar: {e}")
+            return 0
 
     def process_and_upload_batch(self,
                                  image_paths: List[str],
@@ -241,6 +193,8 @@ class AutoFaissIndex:
             for future in tqdm(concurrent.futures.as_completed(future_to_file), total=len(tasks), desc="Processing"):
                 img_path = future_to_file[future]
                 try:
+                    # result is a dictionary with keys:
+                    # "source", "drive_file_id", "embedding"
                     success, result = future.result()
                     if success:
                         cursor.execute("""
@@ -248,15 +202,33 @@ class AutoFaissIndex:
                             VALUES (%s, %s, %s)
                             RETURNING id;
                         """, (result['source'], result['drive_file_id'], result['embedding']))
+
                         new_db_id = cursor.fetchone()[0]
                         
-                        # Update RAM
-                        vec_np = np.array([result['embedding']], dtype=np.float32)
-
-                        id_np = np.array([new_db_id], dtype=np.int64)
-                        self.index.add_with_ids(vec_np, id_np)
+                        try:
+                            self.socket.send_pyobj({
+                                "command": "add",
+                                "id": new_db_id,
+                                "vector": result['embedding'],
+                                "metadata": {
+                                    "name": result['source'],
+                                    "drive_id": result['drive_file_id'],
+                                    "drive_link": f"https://drive.google.com/uc?id={result['drive_file_id']}"
+                                }
+                            })
+                            self.socket.recv_pyobj()
+                        except Exception as zmq_err:
+                            logger.exception(
+                                "Failed to update the FAISS Index for %s: %s",
+                                img_path,
+                                zmq_err
+                            )
                     else:
-                        logger.warning("Worker failed for %s: %s", img_path, result)
+                        logger.warning(
+                            "Worker failed for %s: %s",
+                            img_path,
+                            result
+                        )
                 except Exception as e:
                     logger.exception("Exception collecting result for %s: %s", img_path, e)
 
@@ -281,38 +253,29 @@ class AutoFaissIndex:
         
         query_vector = self.embedder.compute_embeddings(face)
         
-        # FAISS Search
-        query_np = np.array([query_vector], dtype=np.float32)
-        
-        distances, indices = self.index.search(query_np, k)
-        
-        found_ids = [idx for idx in indices[0] if idx != -1]
-        results = []
-        
-        if found_ids:
-            py_ids = tuple(int(x) for x in found_ids)
-            cursor = self.conn.cursor()
+        # Send to the FAISS service
+        try:
+            logging.info("Sending a search request to ZMQ...")
+            self.socket.send_pyobj({
+                "command": "search",
+                "vector": query_vector.tolist(),
+                "k": k
+            })
+            response = self.socket.recv_pyobj()
 
-            # Get the metadata from the postgresql matching the similiar IDs fetched from FAISS
-            query = "SELECT id, source, drive_file_id FROM face_data WHERE id IN %s"
-            cursor.execute(query, (py_ids,))
-            rows = cursor.fetchall()
-            cursor.close()
+            if response["status"] == "ok":
+                return response["results"]
+            else:
+                logger.error(
+                    "FAISS Index error: %s",
+                    response.get('msg')
+                )
+                return []
             
-            row_map = {row[0]: {'name': row[1], 'drive_id': row[2]} for row in rows}
-            
-            for idx, dist in zip(indices[0], distances[0]):
-                if idx != -1 and idx in row_map:
-                    data = row_map[idx]
-                    results.append({
-                        'id': idx,
-                        'score': float(dist),
-                        'name': data['name'],
-                        'drive_link': f"https://drive.google.com/uc?id={data['drive_id']}",
-                        'drive_id': data['drive_id']
-                    })
-
-        return distances, indices, results
+        except Exception as e:
+            logger.exception("ZMQ Search Failed: %s", e)
+            return []
+    
 
     def add_image(self, image: ImageInput, metadata: Dict[str, Any]):
         """
@@ -340,6 +303,7 @@ class AutoFaissIndex:
             pil_image.save(output, format="JPEG")
             image_bytes = output.getvalue()
         
+        logging.info("Adding the uploaded image to the Drive folder...")
         drive_id = upload_bytes_to_folder(
             service=self.drive_service,
             folder_id=self.drive_folder_id,
@@ -348,14 +312,18 @@ class AutoFaissIndex:
             mime_type="image/jpeg",
             uuid_str=new_uuid
         )
+        logging.info("Drive upload done")
 
         if not drive_id:
             raise ValueError("Drive upload failed")
 
         # Insert DB
+        self._get_valid_connection
+
         source_name = metadata.get('name', 'Unknown')
         cursor = self.conn.cursor()
         try:
+            logging.info("Inserting the new data point to PostgreSQL...")
             cursor.execute("""
                 INSERT INTO face_data (source, drive_file_id, embedding)
                 VALUES (%s, %s, %s)
@@ -364,15 +332,26 @@ class AutoFaissIndex:
             
             new_id = cursor.fetchone()[0]
             
-            # Update RAM
-            vec_np = np.array([embedding], dtype=np.float32)
-            id_np = np.array([new_id], dtype=np.int64)
-            self.index.add_with_ids(vec_np, id_np)
+            logging.info("A data point with ID=%s is added to the PostgreSQL", new_id)
+            logging.info("Sending an add request to ZMQ...")
+            # Update FAISS
+            self.socket.send_pyobj({
+                "command": "add",
+                "id": new_id,
+                "vector": embedding.tolist(),
+                "metadata": {
+                    "name": source_name,
+                    "drive_id": drive_id,
+                    "drive_link": f"https://drive.google.com/uc?id={drive_id}"
+                }
+            })
+
+            self.socket.recv_pyobj()
             
             logger.info("Added face: %s (ID: %s)", source_name, new_id)
             return new_uuid
         except Exception as e:
-            logger.error("DB Insert failed: %s", e)
+            logger.exception("DB or Faiss Insert failed: %s", e)
             raise e
         finally:
             cursor.close()
@@ -391,6 +370,7 @@ class AutoFaissIndex:
         
         drive_file_id = file_info.get('id')
 
+        self._get_valid_connection
         cursor = self.conn.cursor()
         try:
             cursor.execute("SELECT id FROM face_data WHERE drive_file_id = %s", (drive_file_id,))
@@ -401,10 +381,20 @@ class AutoFaissIndex:
                 return False
             
             db_id = row[0]
-
-            self.index.remove_ids(np.array([db_id], dtype=np.int64))
+            
+            # DB Delete
             cursor.execute("DELETE FROM face_data WHERE id = %s", (db_id,))
+
+            # Drive Delete
             self.drive_service.files().delete(fileId=drive_file_id).execute()
+
+            # FAISS Delete
+            self.socket.send_pyobj({
+                "command": "delete",
+                "id": db_id
+            })
+            
+            self.socket.recv_pyobj()
             
             logger.info("Deleted face UUID: %s (DB ID: %s)", uuid_str, db_id)
             return True
@@ -414,6 +404,18 @@ class AutoFaissIndex:
             return False
         finally:
             cursor.close()
+
+    def _init_db_connection(self):
+        """
+        Connect to the supabase database
+        """
+        try:
+            self.conn = psycopg2.connect(self.db_dsn)
+            self.conn.autocommit = True
+            logger.info("Connected to PostgreSQL.")
+        except Exception as e:
+            logger.exception("Failed to connect to database: %s", e)
+            raise
 
     def _ensure_models_loaded(self):
         """
@@ -437,3 +439,24 @@ class AutoFaissIndex:
         self.face_detector = load_model(self.face_detect_model_config)
         self.embedder = load_model(self.embeddings_model_config)
         logger.info("Models loaded.")
+
+    
+    def _get_valid_connection(self):
+        """
+        Check if connection is alive. If not, reconnect.
+        Returns a fresh cursor.
+        """
+        try:
+            # Check if connection exists and is open (0 = open)
+            if self.conn is None or self.conn.closed != 0:
+                logger.warning("DB Connection was closed. Reconnecting...")
+                self._init_db_connection()
+            
+            # Lightweight check: Try to create a cursor. 
+            # Sometimes 'self.conn.closed' is 0 but the socket is dead.
+            return self.conn.cursor()
+        except Exception:
+            # Force a hard reconnect
+            logger.warning("DB Socket dead. Forcing hard reconnect...")
+            self._init_db_connection()
+            return self.conn.cursor()

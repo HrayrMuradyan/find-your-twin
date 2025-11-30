@@ -6,10 +6,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const PROD_API_URL = "https://hrayrmuradyan-find-your-twin.hf.space";
     
     // 2. Define your local URL (Localhost Python)
-    const LOCAL_API_URL = "http://127.0.0.1:8000";
+    const LOCAL_API_URL = "http://127.0.0.1:7860";
 
     // 3. Automatically select based on where the browser is running
-    // If the domain is localhost, 127.0.0.1, or if you opened the file directly (file://)
     const isLocalEnvironment = 
         window.location.hostname === 'localhost' || 
         window.location.hostname === '127.0.0.1' || 
@@ -43,7 +42,9 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    // --- File Uploader Elements ---
+    // --- DOM Elements ---
+    
+    // Uploader
     const dropZone = document.getElementById('drop-zone');
     const fileInput = document.getElementById('file-input');
     const browseBtn = document.getElementById('browse-btn');
@@ -56,9 +57,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const searchErrorMessage = document.getElementById('search-error-message');
     const errorText = document.getElementById('error-text');
     
-    // --- Results Elements ---
+    // Stats (Database Size)
+    const dbStatsContainer = document.getElementById('db-stats-container');
+    const dbCountNumber = document.getElementById('db-count-number');
+
+    // Results
     const resultsSection = document.getElementById('results-section');
-    const resultsHeader = resultsSection.querySelector('h3'); // <--- NEW: Selected the Header
+    const resultsHeader = resultsSection.querySelector('h3');
     const loader = document.getElementById('loader');
     const topResultContainer = document.getElementById('top-result-container');
     const topResultImageWrapper = document.getElementById('top-result-image-wrapper');
@@ -70,37 +75,38 @@ document.addEventListener('DOMContentLoaded', () => {
     const userUuid = document.getElementById('user-uuid');
     const copyUuidBtn = document.getElementById('copy-uuid-btn'); 
 
-    // --- Carousel Elements ---
+    // Carousel
     const carouselContainer = document.getElementById('carousel-container');
     const carouselTrack = document.getElementById('carousel-track');
     const carouselPrev = document.getElementById('carousel-prev');
     const carouselNext = document.getElementById('carousel-next');
 
-    // --- Carousel State ---
+    // Carousel State
     let currentIndex = 0; 
     let itemsPerPage = 5;
     let totalItems = 0;
 
-    // --- Image Modal Elements ---
+    // Image Modal
     const imageModal = document.getElementById('image-modal');
     const modalImage = document.getElementById('modal-image');
     const modalCloseBtn = document.querySelector('.modal-close-btn');
 
-    // --- About Page CTA ---
+    // About Page CTA
     const ctaTryNowBtn = document.getElementById('cta-try-now');
     const consentPrivacyLink = document.getElementById('consent-privacy-link'); 
     const aboutPrivacyLink = document.querySelector('.about-privacy-link'); 
 
-    // --- NEW: Manage Data Elements ---
+    // Manage Data
     const deleteForm = document.getElementById('delete-form');
     const uuidInput = document.getElementById('uuid-input');
     const deleteBtn = document.getElementById('delete-btn');
     const deleteMessage = document.getElementById('delete-message');
 
-    // --- State Variable ---
+    // Global State
     let currentFile = null;
+    let hasInitialAnimationRun = false; // Tracks if the startup count-up is done
     
-    // --- Responsive Carousel ---
+    // --- Responsive Carousel Logic ---
     function updateItemsPerPage() {
         if (window.innerWidth < 600) itemsPerPage = 2;
         else if (window.innerWidth < 900) itemsPerPage = 3;
@@ -116,16 +122,84 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    // --- Initialization: Fetch DB Stats (SMART ANIMATION) ---
+    async function fetchDatabaseStats() {
+        if (!dbStatsContainer || !dbCountNumber) return;
+        
+        try {
+            const response = await fetch(`${API_BASE_URL}/stats`);
+            if (!response.ok) return;
+
+            const data = await response.json();
+            const finalCount = data.count || 0;
+
+            dbStatsContainer.classList.remove('hidden');
+
+            if (!hasInitialAnimationRun) {
+                // SCENARIO 1: First Startup (Count from 0)
+                animateValueWithCommas(dbCountNumber, 0, finalCount, 2000, () => {
+                    dbCountNumber.classList.add('count-pop');
+                });
+                
+                // Mark as done so it doesn't happen again
+                hasInitialAnimationRun = true;
+                
+            } else {
+                // SCENARIO 2: Update after upload (No counting, just update)
+                const currentVal = parseInt(dbCountNumber.textContent.replace(/,/g, '')) || 0;
+                
+                // Only act if the number actually changed
+                if (finalCount !== currentVal) {
+                    dbCountNumber.innerHTML = finalCount.toLocaleString();
+                    
+                    // Re-trigger the pop animation
+                    dbCountNumber.classList.remove('count-pop');
+                    void dbCountNumber.offsetWidth; // Force browser reflow to restart animation
+                    dbCountNumber.classList.add('count-pop');
+                }
+            }
+            
+        } catch (error) {
+            console.warn("Could not fetch DB stats:", error);
+        }
+    }
+    
+    // Helper to animate numbers with commas (e.g. 0 -> 1,200)
+    function animateValueWithCommas(obj, start, end, duration, onComplete) {
+        let startTimestamp = null;
+        const step = (timestamp) => {
+            if (!startTimestamp) startTimestamp = timestamp;
+            const progress = Math.min((timestamp - startTimestamp) / duration, 1);
+            
+            // Easing function (easeOutQuad) for a smooth slow-down at the end
+            const easeProgress = 1 - (1 - progress) * (1 - progress);
+            
+            const currentVal = Math.floor(easeProgress * (end - start) + start);
+            
+            // Format with commas
+            obj.innerHTML = currentVal.toLocaleString();
+            
+            if (progress < 1) {
+                window.requestAnimationFrame(step);
+            } else {
+                obj.innerHTML = end.toLocaleString();
+                if (onComplete) onComplete();
+            }
+        };
+        window.requestAnimationFrame(step);
+    }
+
+    // Call stats immediately on load
+    fetchDatabaseStats();
+
 
     // --- Uploader Event Listeners ---
     
-    // 1. Browse Button
     browseBtn.addEventListener('click', (e) => {
         e.stopPropagation(); 
         fileInput.click();
     });
 
-    // This allows clicking to replace the image even if one is already uploaded
     dropZone.addEventListener('click', (e) => {
         if (e.target.closest('#upload-instructions') || e.target === dropZone || e.target.closest('#upload-preview')) { 
             fileInput.click();
@@ -137,7 +211,6 @@ document.addEventListener('DOMContentLoaded', () => {
         if (file) {
             handleFile(file);
         }
-        // Reset value to allow selecting the same file again if needed
         e.target.value = '';
     });
 
@@ -194,7 +267,6 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Control Button Event Listeners ---
     searchBtn.addEventListener('click', () => {
         if (currentFile) {
-            // Hide controls while searching
             uploadControls.classList.add('hidden'); 
             uploadAndSearch(currentFile);
         }
@@ -293,7 +365,7 @@ document.addEventListener('DOMContentLoaded', () => {
         console.log('Uploading file:', file.name);
 
         resultsSection.classList.remove('hidden');
-        resultsHeader.classList.remove('hidden'); // <--- NEW: Reset header visibility on start
+        resultsHeader.classList.remove('hidden'); 
         resultsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
         
         loader.classList.remove('hidden'); 
@@ -320,16 +392,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (!response.ok) {
                 const errData = await response.json();
-                
                 // Check specifically for the "No face detected" 400 error
                 if (response.status === 400) {
                     throw new Error("NO_FACE"); 
                 }
-                
                 throw new Error(errData.detail || `HTTP error! status: ${response.status}`);
             }
 
             const data = await response.json();
+
+            // Refresh stats if we consented (count might have increased)
+            if (consentCheckbox.checked && data.uuid) {
+                // Wait a moment for sidecar to update
+                setTimeout(fetchDatabaseStats, 1000);
+            }
 
             if (!data.results || data.results.length === 0) {
                 console.log("No results returned from API.");
@@ -341,7 +417,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
-            // Fix URLs
+            // Fix URLs if relative
             const fixedResults = data.results.map(r => {
                 if (r.url.startsWith('/')) {
                     return { ...r, url: `${API_BASE_URL}${r.url}` };
@@ -354,7 +430,6 @@ document.addEventListener('DOMContentLoaded', () => {
             await preloadImages(imageUrls);
             console.log("All images preloaded.");
             
-            // --- FIX: Hide loader before showing results ---
             loader.classList.add('hidden');
             
             displayResults(fixedResults); 
@@ -369,27 +444,20 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (error) {
             console.error("Error during search:", error);
             
-            // 1. Hide the loader
             loader.classList.add('hidden');
-            
-            // 2. Hide the content parts of the results section
             topResultContainer.classList.add('hidden');
             carouselContainer.classList.add('hidden');
             otherResultsTitle.classList.add('hidden');
 
-            // 3. Keep the results section wrapper visible so "Start Again" can be seen
             resultsSection.classList.remove('hidden'); 
 
-            // 4. Handle Specific Errors
+            // Handle Specific Errors
             if (error.message === "NO_FACE") {
-                resultsHeader.classList.add('hidden'); // <--- NEW: Hide header on this specific error
+                resultsHeader.classList.add('hidden');
                 searchErrorMessage.classList.remove('hidden');
                 errorText.textContent = "We couldn't find a face in this image. Please try uploading a photo with a clear, visible face.";
-                
-                // Scroll to the error
                 searchErrorMessage.scrollIntoView({ behavior: 'smooth', block: 'center' });
             } else {
-                // Generic error fallback
                 searchErrorMessage.classList.remove('hidden');
                 errorText.textContent = `Search failed: ${error.message}`;
                 searchErrorMessage.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -417,8 +485,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const topResult = results[0];
         topResultContainer.classList.remove('hidden');
         topResultImageWrapper.innerHTML = `<img src="${topResult.url}" alt="Top Similar Image" data-fullsrc="${topResult.url}">`;
+        
+        // This helper (animateCount) is for the match percentage
         animateCount(matchPercentageNumber, topResult.similarity, 1000); 
         setMatchPercentageStyle(matchPercentageNumber, topResult.similarity);
+        
         topResultImageWrapper.querySelector('img').addEventListener('click', () => {
             openModal(topResult.url);
         });
@@ -489,8 +560,8 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
     
+    // Animation for Match Percentage (Simple integer count)
     function animateCount(element, target, duration) {
-        let start = 0;
         const finalTarget = parseInt(target, 10) || 0;
         const startTime = performance.now();
 
@@ -603,6 +674,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (response.ok) {
                     showDeleteMessage(data.message, 'success');
                     uuidInput.value = ''; 
+                    // Refresh stats if an image was deleted (Update, no full count-up)
+                    setTimeout(fetchDatabaseStats, 1000);
                 } else {
                     throw new Error(data.detail || "An unknown error occurred.");
                 }
