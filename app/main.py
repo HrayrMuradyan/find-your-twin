@@ -98,7 +98,7 @@ def startup_event():
     
     logger.info("--- Server starting up... ---")
     try:
-        # 1. Init Google Drive
+        # Init Google Drive
         logger.info("Initializing Google Drive service...")
         drive_service = get_drive_service()
         if drive_service:
