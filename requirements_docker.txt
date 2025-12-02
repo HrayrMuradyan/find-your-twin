@@ -15,7 +15,6 @@ faiss-cpu
 fastapi
 uvicorn==0.38.0
 python-multipart==0.0.20
-fastparquet==2024.11.0
 python-json-logger
 onnxruntime
 psycopg2-binary==2.9.11
