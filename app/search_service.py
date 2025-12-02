@@ -29,8 +29,8 @@ def run_search_server():
     socket = context.socket(zmq.REP)
     
     try:
-        socket.bind("tcp://127.0.0.1:5555")
-        logger.info("ZeroMQ Search Server listening on tcp://127.0.0.1:5555")
+        socket.bind("ipc:///tmp/search_service.ipc")
+        logger.info("ZeroMQ Search Server listening on ipc:///tmp/search_service.ipc")
     except zmq.ZMQError as e:
         logger.critical("Failed to bind ZMQ port 5555: %s", e)
         sys.exit(1)

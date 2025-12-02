@@ -141,7 +141,7 @@ class InferenceClient:
         self.socket.setsockopt(zmq.SNDTIMEO, 5000)
         self.socket.setsockopt(zmq.LINGER, 0) # Do not wait on close
         
-        self.socket.connect("tcp://127.0.0.1:5555")
+        self.socket.connect("ipc:///tmp/search_service.ipc")
 
     def _reconnect_zmq(self):
         """
