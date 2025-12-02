@@ -163,7 +163,6 @@ body {
     animation: countPop 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 
-/* --- Uploader --- */
 #drop-zone {
     border: 2px dashed var(--border-color);
     border-radius: var(--border-radius);

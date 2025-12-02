@@ -4,38 +4,40 @@ FROM python:3.10-slim
 # Set the working directory
 WORKDIR /root
 
-# Copy requirements and install them
-COPY requirements_docker.txt .
-
-RUN pip install --no-cache-dir -r requirements_docker.txt && \
-    pip install scrfd --no-deps
-
-# Install system dependencies (Supervisor + OpenCV libs)
+# Install system dependencies
+# libgl1/glib2 are needed for OpenCV (used by deepface/scrfd)
+# Supervisor is removed
 RUN apt-get update && apt-get install -y \
     libgl1 \
     libglib2.0-0 \
-    supervisor \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy all the files into the container
+# Copy requirements and install
+COPY requirements_docker.txt .
+RUN pip install --no-cache-dir -r requirements_docker.txt && \
+    pip install scrfd --no-deps
+
+# Create project structure
 COPY pyproject.toml /root/pyproject.toml
 COPY src /root/src
 COPY models /root/models
 COPY configs /root/configs
 COPY app /root/app
 
-# Copy the docker start script
-COPY docker_start.sh /root/docker_start.sh
 
-# Make the start script executable
-RUN chmod +x /root/docker_start.sh
+# Create credentials folder (will be populated by run.py from env vars)
+RUN mkdir -p /root/credentials
 
-# Create a writable directory for temporary files (for deepface)
+# Create writable directory for deepface weights
 RUN mkdir -p /root/.deepface && chmod -R 777 /root/.deepface
 ENV DEEPFACE_HOME="/root/.deepface"
+
+# Env vars for Python
+ENV PYTHONPATH=/root
+ENV PYTHONUNBUFFERED=1
 
 # Expose the Hugging Face port
 EXPOSE 7860
 
-# Start the entrypoint script
-CMD ["./docker_start.sh"]
+# CMD uses the new python orchestrator
+CMD ["python", "app/run.py"]

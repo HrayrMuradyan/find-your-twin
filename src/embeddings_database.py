@@ -62,12 +62,6 @@ def worker_init(folder_id, face_model_path, embed_model_path):
 def process_single_image_task(args):
     """
     Given one image, meta pair -> extract face, compute embeddings -> upload to drive -> return upload metadata
-
-    If success:
-        Returns True, {"source": ..., "drive_file_id": ..., "embedding": ...}
-    
-    If fail:
-        Return False, Message
     """
     img_path, meta = args
     global worker_drive_service, worker_folder_id, worker_face_detector, worker_embedder
@@ -110,7 +104,7 @@ def process_single_image_task(args):
 
 class InferenceClient:
     """
-    Inference Service
+    Inference Service Client that talks to the ZMQ Sidecar
     """
 
     def __init__(self,
@@ -133,36 +127,64 @@ class InferenceClient:
         self.embedder = None
         self.face_detect_model_config = None
         self.embeddings_model_config = None
+        self.conn = None
 
         self._init_db_connection()
         
-        # Setup ZeroMQ
-        logger.info("Connecting to the FAISS Search Service")
+        # Setup ZeroMQ with timeouts and robust connection
+        logger.info("Connecting to the FAISS Search Service...")
         self.context = zmq.Context()
         self.socket = self.context.socket(zmq.REQ)
+        
+        # Set timeouts (Receive: 10s, Send: 5s) to prevent hanging
+        self.socket.setsockopt(zmq.RCVTIMEO, 10000)
+        self.socket.setsockopt(zmq.SNDTIMEO, 5000)
+        self.socket.setsockopt(zmq.LINGER, 0) # Do not wait on close
+        
         self.socket.connect("tcp://127.0.0.1:5555")
+
+    def _reconnect_zmq(self):
+        """
+        Recreates the ZMQ socket if the connection becomes stale or corrupted.
+        """
+        logger.warning("Attempting to reconnect to ZMQ Search Service...")
+        try:
+            self.socket.close()
+        except:
+            pass
+            
+        try:
+            self.socket = self.context.socket(zmq.REQ)
+            self.socket.setsockopt(zmq.RCVTIMEO, 10000)
+            self.socket.setsockopt(zmq.SNDTIMEO, 5000)
+            self.socket.setsockopt(zmq.LINGER, 0)
+            self.socket.connect("tcp://127.0.0.1:5555")
+            logger.info("Reconnection successful.")
+        except Exception as e:
+            logger.error("Failed to reconnect to ZMQ: %s", e)
 
     def get_index_count(self) -> int:
         """
         Ask the Sidecar for the total number of vectors.
         """
         try:
-            # We use a short timeout so the homepage doesn't hang if ZMQ is busy
+            # Short timeout for health checks
             self.socket.setsockopt(zmq.RCVTIMEO, 2000)
-            self.socket.setsockopt(zmq.SNDTIMEO, 2000)
-            
             self.socket.send_pyobj({"command": "health"})
             response = self.socket.recv_pyobj()
             
-            # Reset timeouts to default (safe practice)
-            self.socket.setsockopt(zmq.RCVTIMEO, 5000) 
-            self.socket.setsockopt(zmq.SNDTIMEO, 5000)
+            # Restore standard timeout
+            self.socket.setsockopt(zmq.RCVTIMEO, 10000)
 
             if response.get("status") == "ok":
                 return response.get("count", 0)
             return 0
+        except zmq.Again:
+            logger.warning("Timeout getting stats from Sidecar.")
+            return 0
         except Exception as e:
             logger.warning(f"Could not get stats from Sidecar: {e}")
+            self._reconnect_zmq()
             return 0
 
     def process_and_upload_batch(self,
@@ -176,7 +198,7 @@ class InferenceClient:
         logger.info("Starting Multiprocess Batch Upload (%s workers)...", max_workers)
         
         tasks = list(zip(image_paths, metadata_list))
-        cursor = self.conn.cursor()
+        cursor = self._get_valid_connection()
         
         with concurrent.futures.ProcessPoolExecutor(
             max_workers=max_workers,
@@ -184,7 +206,6 @@ class InferenceClient:
             initargs=(self.drive_folder_id, self.face_detect_model_path, self.embeddings_model_path)
         ) as executor:
             
-            # Define the tasks and the function that handles those tasks
             future_to_file = {
                 executor.submit(process_single_image_task, task): task[0] 
                 for task in tasks
@@ -193,8 +214,6 @@ class InferenceClient:
             for future in tqdm(concurrent.futures.as_completed(future_to_file), total=len(tasks), desc="Processing"):
                 img_path = future_to_file[future]
                 try:
-                    # result is a dictionary with keys:
-                    # "source", "drive_file_id", "embedding"
                     success, result = future.result()
                     if success:
                         cursor.execute("""
@@ -216,19 +235,13 @@ class InferenceClient:
                                     "drive_link": f"https://drive.google.com/uc?id={result['drive_file_id']}"
                                 }
                             })
+                            # Wait for ACK
                             self.socket.recv_pyobj()
                         except Exception as zmq_err:
-                            logger.exception(
-                                "Failed to update the FAISS Index for %s: %s",
-                                img_path,
-                                zmq_err
-                            )
+                            logger.exception("Failed to update FAISS Index for %s: %s", img_path, zmq_err)
+                            self._reconnect_zmq()
                     else:
-                        logger.warning(
-                            "Worker failed for %s: %s",
-                            img_path,
-                            result
-                        )
+                        logger.warning("Worker failed for %s: %s", img_path, result)
                 except Exception as e:
                     logger.exception("Exception collecting result for %s: %s", img_path, e)
 
@@ -249,11 +262,10 @@ class InferenceClient:
         face = self.face_detector.detect(image_arr)
         if face is None:
             logger.warning("No face detected in query image.")
-            return [], [], []
+            return [] # Returning empty list correctly triggers 400 or empty results in main
         
         query_vector = self.embedder.compute_embeddings(face)
         
-        # Send to the FAISS service
         try:
             logging.info("Sending a search request to ZMQ...")
             self.socket.send_pyobj({
@@ -266,16 +278,16 @@ class InferenceClient:
             if response["status"] == "ok":
                 return response["results"]
             else:
-                logger.error(
-                    "FAISS Index error: %s",
-                    response.get('msg')
-                )
+                logger.error("FAISS Index error: %s", response.get('msg'))
                 return []
-            
+        except zmq.Again:
+            logger.error("ZMQ Search Timed out. Service might be busy.")
+            self._reconnect_zmq()
+            raise TimeoutError("Search service timed out")
         except Exception as e:
             logger.exception("ZMQ Search Failed: %s", e)
+            self._reconnect_zmq()
             return []
-    
 
     def add_image(self, image: ImageInput, metadata: Dict[str, Any]):
         """
@@ -303,7 +315,7 @@ class InferenceClient:
             pil_image.save(output, format="JPEG")
             image_bytes = output.getvalue()
         
-        logging.info("Adding the uploaded image to the Drive folder...")
+        logging.info("Adding uploaded image to Drive folder...")
         drive_id = upload_bytes_to_folder(
             service=self.drive_service,
             folder_id=self.drive_folder_id,
@@ -312,18 +324,14 @@ class InferenceClient:
             mime_type="image/jpeg",
             uuid_str=new_uuid
         )
-        logging.info("Drive upload done")
-
+        
         if not drive_id:
             raise ValueError("Drive upload failed")
 
-        # Insert DB
-        self._get_valid_connection
-
         source_name = metadata.get('name', 'Unknown')
-        cursor = self.conn.cursor()
+        cursor = self._get_valid_connection()
         try:
-            logging.info("Inserting the new data point to PostgreSQL...")
+            logging.info("Inserting new data point to PostgreSQL...")
             cursor.execute("""
                 INSERT INTO face_data (source, drive_file_id, embedding)
                 VALUES (%s, %s, %s)
@@ -332,9 +340,7 @@ class InferenceClient:
             
             new_id = cursor.fetchone()[0]
             
-            logging.info("A data point with ID=%s is added to the PostgreSQL", new_id)
-            logging.info("Sending an add request to ZMQ...")
-            # Update FAISS
+            logging.info("Syncing to FAISS via ZMQ...")
             self.socket.send_pyobj({
                 "command": "add",
                 "id": new_id,
@@ -345,13 +351,13 @@ class InferenceClient:
                     "drive_link": f"https://drive.google.com/uc?id={drive_id}"
                 }
             })
-
-            self.socket.recv_pyobj()
+            self.socket.recv_pyobj() # Wait for ACK
             
             logger.info("Added face: %s (ID: %s)", source_name, new_id)
             return new_uuid
         except Exception as e:
             logger.exception("DB or Faiss Insert failed: %s", e)
+            self._reconnect_zmq()
             raise e
         finally:
             cursor.close()
@@ -370,8 +376,7 @@ class InferenceClient:
         
         drive_file_id = file_info.get('id')
 
-        self._get_valid_connection
-        cursor = self.conn.cursor()
+        cursor = self._get_valid_connection()
         try:
             cursor.execute("SELECT id FROM face_data WHERE drive_file_id = %s", (drive_file_id,))
             row = cursor.fetchone()
@@ -389,12 +394,15 @@ class InferenceClient:
             self.drive_service.files().delete(fileId=drive_file_id).execute()
 
             # FAISS Delete
-            self.socket.send_pyobj({
-                "command": "delete",
-                "id": db_id
-            })
-            
-            self.socket.recv_pyobj()
+            try:
+                self.socket.send_pyobj({
+                    "command": "delete",
+                    "id": db_id
+                })
+                self.socket.recv_pyobj()
+            except Exception as e:
+                logger.error("ZMQ delete failed: %s", e)
+                self._reconnect_zmq()
             
             logger.info("Deleted face UUID: %s (DB ID: %s)", uuid_str, db_id)
             return True
@@ -406,9 +414,6 @@ class InferenceClient:
             cursor.close()
 
     def _init_db_connection(self):
-        """
-        Connect to the supabase database
-        """
         try:
             self.conn = psycopg2.connect(self.db_dsn)
             self.conn.autocommit = True
@@ -418,9 +423,6 @@ class InferenceClient:
             raise
 
     def _ensure_models_loaded(self):
-        """
-        Ensure the models are loaded
-        """
         if self.face_detector and self.embedder:
             return
         
@@ -440,23 +442,13 @@ class InferenceClient:
         self.embedder = load_model(self.embeddings_model_config)
         logger.info("Models loaded.")
 
-    
     def _get_valid_connection(self):
-        """
-        Check if connection is alive. If not, reconnect.
-        Returns a fresh cursor.
-        """
         try:
-            # Check if connection exists and is open (0 = open)
             if self.conn is None or self.conn.closed != 0:
                 logger.warning("DB Connection was closed. Reconnecting...")
                 self._init_db_connection()
-            
-            # Lightweight check: Try to create a cursor. 
-            # Sometimes 'self.conn.closed' is 0 but the socket is dead.
             return self.conn.cursor()
         except Exception:
-            # Force a hard reconnect
             logger.warning("DB Socket dead. Forcing hard reconnect...")
             self._init_db_connection()
             return self.conn.cursor()
