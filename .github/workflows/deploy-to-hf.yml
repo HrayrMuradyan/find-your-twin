@@ -47,7 +47,6 @@ jobs:
           cp -r app/ hf_sync/
           cp requirements_docker.txt hf_sync/
           cp Dockerfile hf_sync/
-          cp docker_start.sh hf_sync/
 
       # Check if there is a change in the files and push changes
       - name: Push to Hub
