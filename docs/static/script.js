@@ -3,7 +3,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- CONFIGURATION ---
     
     // 1. Define your production URL (Hugging Face)
-    const PROD_API_URL = "https://hrayrmuradyan-find-your-twin.hf.space";
+    const PROD_API_URL = "https://hrayrmuradyan-find-your-twin-inference.hf.space";
     
     // 2. Define your local URL (Localhost Python)
     const LOCAL_API_URL = "http://127.0.0.1:7860";
