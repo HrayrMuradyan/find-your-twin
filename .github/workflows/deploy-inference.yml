@@ -1,0 +1,91 @@
+name: Deploy Inference Service to Hugging Face
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'services/inference/**'
+      - 'pyproject.toml'
+      - 'configs/**'
+      - 'models/**'
+      - 'src/**'
+      - '.github/workflows/deploy-inference.yml'
+
+jobs:
+  deploy-inference:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 1
+          lfs: true
+
+      - name: Prepare Build Context
+        run: |
+          mkdir build_context
+
+          cp services/inference/Dockerfile build_context/Dockerfile
+
+          # cp services/inference/requirements.txt build_context/requirements.txt
+
+          mkdir -p build_context/services/inference
+          cp services/inference/requirements.txt build_context/services/inference/
+          cp services/inference/main.py build_context/services/inference/
+          
+          if [ -d "models" ]; then
+             mkdir -p build_context/models
+             cp -r models/* build_context/models/
+          fi
+
+          cp -r src build_context/src
+
+          cp pyproject.toml build_context/ 2>/dev/null || true
+          cp -r configs build_context/configs 2>/dev/null || true
+          
+          cp .gitattributes build_context/ 2>/dev/null || true
+
+          echo "Build Context Structure:"
+          ls -R build_context
+
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.HF_SPACE }}
+
+      - name: Trust Hugging Face Host
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan hf.co >> ~/.ssh/known_hosts
+
+      - name: Sync and Push to Hugging Face
+        env:
+          HF_USERNAME: "HrayrMuradyan"
+          HF_SPACE_NAME: "find-your-twin-inference"
+        run: |
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global user.name "GitHub Actions"
+
+          git clone git@hf.co:spaces/$HF_USERNAME/$HF_SPACE_NAME hf_space_repo
+
+          if [ -f hf_space_repo/README.md ]; then
+            echo "Preserving README.md from Hugging Face Space..."
+            cp hf_space_repo/README.md build_context/README.md
+          fi
+
+          echo "Syncing files..."
+          rsync -av --delete --exclude '.git' --exclude '.github' build_context/ hf_space_repo/
+
+          cd hf_space_repo
+
+          git lfs install
+          
+          git add .
+          
+          if ! git diff --staged --quiet; then
+            git commit -m "Sync from GitHub: ${{ github.sha }}"
+            git push origin main
+            echo "Successfully pushed to Hugging Face."
+          else
+            echo "No changes detected. Skipping push."
+          fi

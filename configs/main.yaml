@@ -3,7 +3,6 @@ app:
   paths:
     static: "docs/static"
     index_html: "docs/index.html" 
-  base_url: "http://127.0.0.1:8000"
 
 models:
   paths:
