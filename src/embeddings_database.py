@@ -6,7 +6,6 @@ from typing import Any, Dict, List, Optional, Union
 import uuid
 import io
 import os
-import psycopg2
 from dotenv import load_dotenv
 from PIL import Image
 
@@ -31,11 +30,9 @@ ImageInput = Union[ImagePath, np.ndarray]
 
 class DatabaseServiceClient:
     """
-    Handles:
-    1. ML Inference (Detection + Embedding) LOCALLY (in the Inference Service)
-    2. Postgres Metadata Storage LOCALLY (Direct DB Access)
-    3. Google Drive Uploads LOCALLY (Direct Drive Access)
-    4. FAISS Index Updates REMOTELY (via HTTP to Database Service)
+    Senior Pattern: Facade / Gateway
+    1. Performs compute-heavy ML tasks locally (Edge/Client side).
+    2. Delegates data persistence and retrieval to the Backend Service.
     """
 
     def __init__(self,
@@ -56,11 +53,6 @@ class DatabaseServiceClient:
         # Either locally or HF
         self.db_service_url = hf_url or f"http://host.docker.internal:{db_port}"
         
-        # Postgres Config
-        self.db_dsn = os.getenv("DB_CONNECTION_STRING")
-        if not self.db_dsn:
-            raise ValueError("DB_CONNECTION_STRING not found.")
-        
         # Drive Config
         self.drive_service = drive_service
         self.drive_folder_id = drive_folder_id
@@ -73,32 +65,23 @@ class DatabaseServiceClient:
         self.embedder = None
         self.face_detect_model_config = None
         self.embeddings_model_config = None
-        
-        # HTTP Client
+
         self.http_client = httpx.AsyncClient(
             base_url=self.db_service_url,
             timeout=30.0,
             headers={}
         )
 
-        self._init_db_connection()
-
     async def get_index_count(self) -> Dict:
-        """Call Database Service Health Endpoint"""
         try:
             resp = await self.http_client.get("/health")
             resp.raise_for_status()
             return resp.json()
         except Exception as e:
-            logger.error(f"Failed to contact Database Service: {e}")
+            logger.error(f"Health check failed: {e}")
             return {"count": 0}
 
     async def search_image(self, image: ImageInput, k: int = 5):
-        """
-        1. Detect Face (Local ML)
-        2. Embed (Local ML)
-        3. Search (Remote HTTP to Database Service)
-        """
         self._ensure_models_loaded()
         
         if isinstance(image, (str, Path)):
@@ -106,48 +89,42 @@ class DatabaseServiceClient:
         else:
             image_arr = image
         
-        # 1. Detect
+        # Face Detect + Embeddings
         face = self.face_detector.detect(image_arr)
         if face is None:
-            raise ValueError("No face detected in query image.")
+            raise ValueError("No face detected.")
         
-        # 2. Embed
         query_vector = self.embedder.compute_embeddings(face)
         
-        # 3. Remote Search
+        # Search vor similars through remote FAISS
         try:
             response = await self.http_client.post("/search", json={
                 "vector": query_vector.tolist(),
                 "k": k
             })
             response.raise_for_status()
-            data = response.json()
-            return data.get("results", [])
-            
+            return response.json().get("results", [])
         except httpx.HTTPError as e:
-            logger.error("HTTP Search Error: %s", e)
+            logger.error(f"Search Service Error: {e}")
             raise e
 
-    async def add_image(self, image: ImageInput, metadata: Dict[str, Any]):
-        """
-        1. Detect & Embed (Local ML)
-        2. Upload to Drive (Local IO)
-        3. Insert to Postgres (Local DB)
-        4. Update FAISS (Remote HTTP)
-        """
+    async def add_image(self,
+                        image: ImageInput,
+                        metadata: Dict[str, Any]):
+
         self._ensure_models_loaded()
         if not (self.drive_service and self.drive_folder_id):
-             raise ValueError("Google Drive service not configured")
+             raise ValueError("Google Drive not configured")
 
         image_arr = read_image(image) if isinstance(image, (str, Path)) else image
         
-        # 1. Inference
+        # Detection + Embedding
         face = self.face_detector.detect(image_arr)
         if face is None:
             raise ValueError("No face detected.")
         embedding = self.embedder.compute_embeddings(face)
 
-        # 2. Drive Upload
+        # Drive Upload
         new_uuid = str(uuid.uuid4())
         pil_image = Image.fromarray(image_arr)
         with io.BytesIO() as output:
@@ -162,86 +139,55 @@ class DatabaseServiceClient:
             mime_type="image/jpeg",
             uuid_str=new_uuid
         )
-        if not drive_id: raise ValueError("Drive upload failed")
 
-        # 3. Postgres Insert
+        if not drive_id:
+            raise ValueError("Drive upload failed")
+
+        # We send all necessary data to the backend. 
+        # The Backend handles SQL insert AND Faiss update atomically.
         source_name = metadata.get('name', 'Unknown')
-        cursor = self._get_valid_connection()
+        
         try:
-            cursor.execute("""
-                INSERT INTO face_data (source, drive_file_id, embedding)
-                VALUES (%s, %s, %s)
-                RETURNING id;
-            """, (source_name, drive_id, embedding.tolist()))
-            new_id = cursor.fetchone()[0]
-            
-            # 4. Remote FAISS Update
             await self.http_client.post("/add", json={
-                "id": new_id,
                 "vector": embedding.tolist(),
+                "drive_file_id": drive_id,  
+                "source": source_name,
                 "metadata": {
                     "name": source_name,
                     "drive_id": drive_id,
                     "drive_link": f"https://drive.google.com/uc?id={drive_id}"
                 }
             })
-            
-            logger.info("Added face: %s (ID: %s)", source_name, new_id)
+            logger.info(f"Persisted face: {source_name}")
             return new_uuid
         except Exception as e:
-            logger.exception("Failed to add image")
+            logger.exception(f"Failed to persist data remotely: {e}")
             raise e
-        finally:
-            cursor.close()
 
     async def delete_image_by_uuid(self, uuid_str: str) -> bool:
-        """
-        Deletes from Drive & Postgres locally, then tells Remote FAISS to delete.
-        """
         if not self.drive_service: return False
 
-        # 1. Drive Info
         file_info = get_file_by_uuid(self.drive_service, uuid_str)
         if not file_info: return False
         drive_file_id = file_info.get('id')
 
-        cursor = self._get_valid_connection()
+        # Delete from Drive
         try:
-            # 2. Get DB ID
-            cursor.execute("SELECT id FROM face_data WHERE drive_file_id = %s", (drive_file_id,))
-            row = cursor.fetchone()
-            if not row: return False
-            db_id = row[0]
-            
-            # 3. Delete from Postgres
-            cursor.execute("DELETE FROM face_data WHERE id = %s", (db_id,))
-            
-            # 4. Delete from Drive
             self.drive_service.files().delete(fileId=drive_file_id).execute()
+        except Exception as e:
+            logger.warning(f"Drive delete failed: {e}")
 
-            # 5. Delete from FAISS (Remote)
-            try:
-                await self.http_client.post("/delete", json={"id": db_id})
-            except Exception as e:
-                logger.error(f"Remote delete failed (FAISS might be out of sync): {e}")
-
+        # Delete from Database Service (Handles SQL + FAISS)
+        try:
+            await self.http_client.post("/delete", json={"drive_file_id": drive_file_id})
             return True
-        finally:
-            cursor.close()
-
-    # --- Internals ---
-    def _init_db_connection(self):
-        self.conn = psycopg2.connect(self.db_dsn)
-        self.conn.autocommit = True
-
-    def _get_valid_connection(self):
-        if self.conn.closed != 0:
-            self._init_db_connection()
-        return self.conn.cursor()
+        except Exception as e:
+            logger.error(f"Remote delete failed: {e}")
+            return False
 
     def _ensure_models_loaded(self):
         if self.face_detector and self.embedder: return
-        logger.info("Loading Inference Models...")
+        logger.info("Loading Models...")
         
         if self.face_detect_model_config is None:
             validate_model(self.face_detect_model_path)

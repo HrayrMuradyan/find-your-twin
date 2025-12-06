@@ -27,8 +27,6 @@ jobs:
 
           cp services/inference/Dockerfile build_context/Dockerfile
 
-          # cp services/inference/requirements.txt build_context/requirements.txt
-
           mkdir -p build_context/services/inference
           cp services/inference/requirements.txt build_context/services/inference/
           cp services/inference/main.py build_context/services/inference/

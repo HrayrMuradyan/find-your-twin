@@ -95,18 +95,14 @@ class DeepFaceEmbedder:
             )
 
             # Get the raw embedding
-            embedding = np.array(self.model.forward(normalized_img))
-
             # Squeeze the array to ensure (self.dim,) shape
-            embedding = embedding.squeeze()
-            
             # Calculate the norm of the embedding
-            norm = np.linalg.norm(embedding)
-            
             # Add an epsilon
-            epsilon = np.finfo(embedding.dtype).eps
-            
             # Get normalized embeddings by dividing the embeddings by its norm
+            embedding = np.array(self.model.forward(normalized_img))  
+            embedding = embedding.squeeze()
+            norm = np.linalg.norm(embedding)
+            epsilon = np.finfo(embedding.dtype).eps
             normalized_embedding = embedding / (norm + epsilon)
         
             # Return the normalized (self.dim,) embedding

@@ -22,18 +22,6 @@ def validate_model(model):
     Args:
         model (str or pathlib.Path): Path to the model directory to validate.
 
-    Raises:
-        TypeError: If `model` is not a string or Path, 
-                   or if the provided path is not a directory,
-                   or if `config.json` is missing.
-        ValueError: If `config.json` does not contain all required keys.
-
-    Returns:
-        bool: Always returns True if validation passes successfully.
-
-    Example:
-        >>> validate_model("models/face_detect_model")
-        True
     """
     if not isinstance(model, (str, Path)):
         raise TypeError(f"Argument model has to be a string or a Path object. You have {type(model)}")

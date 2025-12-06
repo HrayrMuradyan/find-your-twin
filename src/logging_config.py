@@ -14,8 +14,6 @@ def setup_logging():
     Configures global logging for the entire application.
     Must be called once at the app entry point, before any loggers are created.
     """
-    # 1. Call the warning filter function FIRST
-    filter_warnings()
 
     root = logging.getLogger()
     if root.handlers:
@@ -75,12 +73,3 @@ def suppress_noisy_logs():
     ]
     for name in noisy:
         logging.getLogger(name).setLevel(logging.ERROR)
-
-
-def filter_warnings():
-    warnings.filterwarnings(
-        "ignore", 
-        message=r"You are using a Python version.*", 
-        category=FutureWarning, 
-        module=r"google\.api_core\._python_version_support"
-    )

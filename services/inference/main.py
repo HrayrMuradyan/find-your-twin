@@ -1,7 +1,3 @@
-# ---------------------------------------------------
-# IMPORTS
-# ---------------------------------------------------
-
 import uvicorn
 import numpy as np
 from PIL import Image, ImageOps
@@ -12,7 +8,7 @@ from pathlib import Path
 import logging
 import os
 
-# Add project root to sys.path
+# Add project root to sys.path to be able to import from src
 import sys
 script_dir = Path(__file__).parent
 PROJECT_ROOT = script_dir.parent
@@ -30,15 +26,13 @@ from src.image import resize_image
 from src.logging_config import setup_logging
 from src.credentials import setup_google_credentials
 
-# Setup logger
+# Setup logger and config
 setup_logging()
 logger = logging.getLogger(__name__)
 
-# ---------------------------------------------------
-# CONFIGURATION
-# ---------------------------------------------------
-
 CONFIG = load_config()
+
+# App initialization and CORS
 app = FastAPI(title="Inference Service")
 
 app.add_middleware(
@@ -59,26 +53,22 @@ FACE_DETECT_MODEL = Path(CONFIG['models']['paths']['face_detect_model'])
 EMBEDDINGS_MODEL = Path(CONFIG['models']['paths']['embeddings_model'])
 IMAGE_MAX_SIZE = int(CONFIG['image']['max_size'])
 
-# Search thresholds
+# Search configuration
 RETRIEVAL_SIMILARITY_THRESHOLD = int(CONFIG['search']['retrieval_similarity_threshold'])
 MIN_OTHER_IMAGES = int(CONFIG['search']['min_other_images'])
 K_TO_SEARCH = int(CONFIG['search']['k_to_search']) 
 SAVE_SIMILARITY_THRESHOLD = int(CONFIG['search']['save_similarity_threshold'])
 
-# ---------------------------------------------------
-# STARTUP
-# ---------------------------------------------------
+
 @app.on_event("startup")
 def startup_event():
     global db_client, drive_service, drive_folder_id
-    
     
     logger.info("--- Inference Service Starting ---")
     try:
         logger.info("Initializing the Credentials...")
         setup_google_credentials(script_dir)
 
-        # 1. Init Google Drive (For Image Storage)
         logger.info("Initializing Google Drive service...")
         drive_service = get_drive_service()
         if drive_service:
@@ -87,7 +77,6 @@ def startup_event():
         else:
             logger.error("Failed to initialize Google Drive. Check ENV vars.")
 
-        # 2. Init Database Client (Loads ML Models locally)
         logger.info("Initializing ML Models & Database Connection...")
         db_client = DatabaseServiceClient(
             face_detect_model=FACE_DETECT_MODEL,
@@ -100,21 +89,12 @@ def startup_event():
     except Exception as e:
         logger.exception("Startup failed: %s", e)
 
-# ---------------------------------------------------
-# ENDPOINTS
-# ---------------------------------------------------
 
 @app.post("/search/")
 async def search_image(
     file: UploadFile = File(...),
     consent: bool = Form(False) 
 ):
-    """
-    1. Detects face (Local)
-    2. Computes embedding (Local)
-    3. Sends vector to Database Service (HTTP)
-    4. Returns results (Same format as before)
-    """
     global db_client
     if not db_client:
         raise HTTPException(status_code=503, detail="Server initializing.")
@@ -130,19 +110,17 @@ async def search_image(
         # Detect -> Embed -> POST to Database Service
         similar_images = await db_client.search_image(img_array, k=K_TO_SEARCH)
     except ValueError as e:
-        # This catches "No face detected"
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         logger.exception("Search failed: %s", e)
         raise HTTPException(status_code=500, detail="Processing error.")
     
-    # --- Response Formatting (Identical to original) ---
+    # Response formatting
     formatted_results = []
     highest_similarity = 0
         
     for similar_i in similar_images:
         raw_score = similar_i['score']
-        # Convert cosine similarity to percentage (simple heuristic)
         similarity_score = int(max(0, raw_score) * 100)
         
         formatted_results.append({
@@ -157,6 +135,10 @@ async def search_image(
         top_result = formatted_results[0]
         other_results = formatted_results[1:]
         
+        # We want all other results to be in the similarity threshold
+        # But don't want to remove all images if they all fall below the threshold
+        # Thus, save at least MIN_OTHER_IMAGES instances
+        
         valid_others = [
             res for res in other_results if res['similarity'] >= RETRIEVAL_SIMILARITY_THRESHOLD
         ]
@@ -166,14 +148,14 @@ async def search_image(
     else:
         response_data = {"results": []}
 
-    # Handle Consent (Save Image)
+    # If consent is given, save the image
     if consent:
         if highest_similarity > SAVE_SIMILARITY_THRESHOLD:
             logger.info("Consent given, but duplicate (Score: %s). Skipping.", highest_similarity)
         else:
             try:
                 logger.info("Consent given. Saving new face...")
-                # Uploads to Drive -> Insert DB -> Update Remote FAISS
+                # Uploads to Drive -> Insert DB (via remote) -> Update FAISS (via remote)
                 new_uuid = await db_client.add_image(
                     image=img_array, 
                     metadata={'name': 'user_data'}
@@ -204,7 +186,6 @@ async def delete_image_by_uuid(uuid: str):
 
 @app.get("/gdrive-image/{file_id}")
 async def get_gdrive_image(file_id: str):
-    """Proxy for fetching images securely from Drive"""
     global drive_service
     if not drive_service:
         raise HTTPException(status_code=503, detail="Service unavailable.")
@@ -230,4 +211,6 @@ def read_root():
     return {"status": "Inference Service Online"}
 
 if __name__ == "__main__":
-    uvicorn.run("main:app", host="0.0.0.0", port=7860)
+    # Read port from env, default to 7860
+    port = int(os.getenv("INFERENCE_PORT", 7860))
+    uvicorn.run("main:app", host="0.0.0.0", port=port)
