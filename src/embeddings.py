@@ -4,23 +4,20 @@ import numpy as np
 from deepface import DeepFace
 from deepface.modules import preprocessing
 import sys
+from PIL import Image
+import logging
+
+# Assuming project structure context for imports
 script_dir = Path(__file__).parent
 PROJECT_ROOT = script_dir.parent
 sys.path.append(str(PROJECT_ROOT))
 from src.image import read_image
-from PIL import Image
 
-import logging
 logger = logging.getLogger(__name__)
 
 class DeepFaceEmbedder:
     """
     A wrapper class for generating face embeddings using DeepFace models.
-
-    Features:
-    - Supports multiple DeepFace models (e.g., Facenet, VGG-Face, ArcFace, etc.)
-    - Loads and reuses models efficiently
-    - Converts image paths or numpy arrays into embeddings
     """
 
     def __init__(
@@ -31,16 +28,6 @@ class DeepFaceEmbedder:
         normalization: str = "base",
         dim: int = 512
     ):
-        """
-        Initializes the DeepFaceEmbedder.
-
-        Args:
-            model_name (str): The name of the DeepFace model to use.
-            enforce_detection (bool): If True, raises an error if no face is detected.
-            target_size (list[int, int]): Target size for face resizing [height, width].
-            normalization (str): Normalization method for input image.
-            dim (int): The dimension of the embeddings.
-        """
         self.model_name = model_name
         self.enforce_detection = enforce_detection
         self.target_size = target_size
@@ -51,6 +38,7 @@ class DeepFaceEmbedder:
 
     def _load_model(self, model_name: str):
         """Loads and returns the specified DeepFace model."""
+        model = None
         try:
             logging.info("Loading DeepFace model: %s", model_name)
             model = DeepFace.build_model(model_name)
@@ -60,19 +48,17 @@ class DeepFaceEmbedder:
             logging.exception(
                 "There was an error building DeepFace embedding model with name '%s'", model_name
             )
+
         return model
 
     def compute_embeddings(self, img: Union[str, Path, np.ndarray]) -> Optional[np.ndarray]:
         """
         Computes the face embedding for the given image.
-
-        Args:
-            img (str, Path, or np.ndarray): Path to the image file, Path object, or a numpy array.
-
-        Returns:
-            np.ndarray | None: A 1D (dim,) L2-normalized face embedding vector,
-                             or None if embedding fails.
         """
+        if self.model is None:
+            logging.error("Model not loaded. Cannot compute embeddings.")
+            return None
+
         if isinstance(img, (str, Path)):
             image = read_image(img)
         elif isinstance(img, np.ndarray):
@@ -94,18 +80,13 @@ class DeepFaceEmbedder:
                 normalization=self.normalization
             )
 
-            # Get the raw embedding
-            # Squeeze the array to ensure (self.dim,) shape
-            # Calculate the norm of the embedding
-            # Add an epsilon
-            # Get normalized embeddings by dividing the embeddings by its norm
+            # Get the raw embedding, squeeze, normalize
             embedding = np.array(self.model.forward(normalized_img))  
             embedding = embedding.squeeze()
             norm = np.linalg.norm(embedding)
             epsilon = np.finfo(embedding.dtype).eps
             normalized_embedding = embedding / (norm + epsilon)
         
-            # Return the normalized (self.dim,) embedding
             return normalized_embedding.astype(np.float32)
 
         except Exception as e:
