@@ -1,5 +1,10 @@
 # Face Similarity Search / Find Your Twin
 
+[![Python 3.10.19](https://img.shields.io/badge/python-3.10-blue.svg)](https://www.python.org/downloads/release/python-31019/)
+[![Database Service Deployment](https://github.com/HrayrMuradyan/find-your-twin/actions/workflows/deploy-database.yml/badge.svg)](https://github.com/HrayrMuradyan/find-your-twin/actions/workflows/deploy-database.yml)
+[![Inference Service Deployment](https://github.com/HrayrMuradyan/find-your-twin/actions/workflows/deploy-inference.yml/badge.svg)](https://github.com/HrayrMuradyan/find-your-twin/actions/workflows/deploy-inference.yml)
+[![codecov](https://codecov.io/gh/HrayrMuradyan/find-your-twin/graph/badge.svg?token=F6E0R8HT4B)](https://codecov.io/gh/HrayrMuradyan/find-your-twin)
+
 Author: Hrayr Muradyan
 
 ## About
