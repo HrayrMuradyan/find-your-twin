@@ -1,25 +1,100 @@
 document.addEventListener('DOMContentLoaded', () => {
-
-    // --- CONFIGURATION ---
     
-    // 1. Define your production URL (Hugging Face)
-    const PROD_API_URL = "https://hrayrmuradyan-find-your-twin-inference.hf.space";
-    
-    // 2. Define your local URL (Localhost Python)
-    const LOCAL_API_URL = "http://127.0.0.1:7860";
+    // Production URLs
+    const PROD_INFERENCE_URL = "https://hrayrmuradyan-find-your-twin-inference.hf.space";
+    const PROD_DATABASE_URL = "https://hrayrmuradyan-find-your-twin-database.hf.space"; 
 
-    // 3. Automatically select based on where the browser is running
+    // Local URLs
+    const LOCAL_INFERENCE_URL = "http://127.0.0.1:7860";
+    const LOCAL_DATABASE_URL = "http://127.0.0.1:8800";
+
+    // Environment Detection
     const isLocalEnvironment = 
         window.location.hostname === 'localhost' || 
         window.location.hostname === '127.0.0.1' || 
         window.location.protocol === 'file:';
 
-    const API_BASE_URL = isLocalEnvironment ? LOCAL_API_URL : PROD_API_URL;
+    const API_BASE_URL = isLocalEnvironment ? LOCAL_INFERENCE_URL : PROD_INFERENCE_URL;
+    const DB_BASE_URL = isLocalEnvironment ? LOCAL_DATABASE_URL : PROD_DATABASE_URL;
 
     console.log(`Environment detected: ${isLocalEnvironment ? 'DEVELOPMENT' : 'PRODUCTION'}`);
-    console.log(`Using API: ${API_BASE_URL}`);
 
-    // --- Tab Switching ---
+    // Startup & Health Check Logic
+    
+    const startupOverlay = document.getElementById('startup-overlay');
+    const mainAppWrapper = document.getElementById('main-app-wrapper');
+    const statusInference = document.getElementById('status-inference');
+    const statusDb = document.getElementById('status-db');
+    const dbStatsContainer = document.getElementById('db-stats-container');
+    const dbCountNumber = document.getElementById('db-count-number');
+    let hasInitialAnimationRun = false; 
+
+    // Mark UI as active
+    function markServiceActive(element) {
+        if (!element) return;
+        element.classList.add('active'); 
+    }
+
+    // Poll service until 200 OK
+    async function checkServiceHealth(url, statusElement) {
+        const pollInterval = 2000; 
+        
+        const check = async () => {
+            try {
+                // Using fetch with a timeout signal
+                const response = await fetch(url, { 
+                    method: 'GET',
+                    signal: AbortSignal.timeout(5000) 
+                });
+                
+                if (response.ok) {
+                    markServiceActive(statusElement);
+                    return true;
+                }
+            } catch (e) {
+                console.log(`Waiting for ${url}...`);
+            }
+            // Retry
+            await new Promise(r => setTimeout(r, pollInterval));
+            return check();
+        };
+        return check();
+    }
+
+    // Main System Check
+    async function initSystemCheck() {
+        console.log("Starting System Health Checks...");
+        
+        document.body.style.overflow = 'hidden';
+
+        // Inference health check
+        const inferencePromise = checkServiceHealth(API_BASE_URL + "/", statusInference);
+        
+        // Database health check
+        const dbPromise = checkServiceHealth(DB_BASE_URL + "/health", statusDb);
+
+        await Promise.all([inferencePromise, dbPromise]);
+
+        // Wait 2 seconds to show the green ticks
+        setTimeout(() => {
+            // Trigger CSS Animations
+            startupOverlay.classList.add('fade-out');
+            mainAppWrapper.classList.remove('blurred-content');
+            mainAppWrapper.classList.add('content-visible');
+            
+            // Unlock scrolling after animation
+            setTimeout(() => {
+                document.body.style.overflow = ''; 
+                fetchDatabaseStats(); 
+            }, 500);
+            
+        }, 2000); 
+    }
+
+    // Start Check Immediately
+    initSystemCheck();
+
+    // Tab Switching
     const navLinks = document.querySelectorAll('.nav-link');
     const tabContents = document.querySelectorAll('.tab-content');
 
@@ -41,8 +116,6 @@ document.addEventListener('DOMContentLoaded', () => {
             window.scrollTo({ top: 0, behavior: 'auto' }); 
         });
     });
-
-    // --- DOM Elements ---
     
     // Uploader
     const dropZone = document.getElementById('drop-zone');
@@ -56,10 +129,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const consentBox = document.querySelector('.consent-box');
     const searchErrorMessage = document.getElementById('search-error-message');
     const errorText = document.getElementById('error-text');
-    
-    // Stats (Database Size)
-    const dbStatsContainer = document.getElementById('db-stats-container');
-    const dbCountNumber = document.getElementById('db-count-number');
 
     // Results
     const resultsSection = document.getElementById('results-section');
@@ -104,9 +173,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Global State
     let currentFile = null;
-    let hasInitialAnimationRun = false; // Tracks if the startup count-up is done
     
-    // --- Responsive Carousel Logic ---
+    // Responsive Carousel Logic
     function updateItemsPerPage() {
         if (window.innerWidth < 600) itemsPerPage = 2;
         else if (window.innerWidth < 900) itemsPerPage = 3;
@@ -122,7 +190,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // --- Initialization: Fetch DB Stats (SMART ANIMATION) ---
+    // Fetch DB Stats (Run after health check)
     async function fetchDatabaseStats() {
         if (!dbStatsContainer || !dbCountNumber) return;
         
@@ -133,28 +201,21 @@ document.addEventListener('DOMContentLoaded', () => {
             const data = await response.json();
             const finalCount = data.count || 0;
 
-            dbStatsContainer.classList.remove('hidden');
+            dbStatsContainer.classList.add('stats-visible');
 
             if (!hasInitialAnimationRun) {
-                // SCENARIO 1: First Startup (Count from 0)
+                // First Startup
                 animateValueWithCommas(dbCountNumber, 0, finalCount, 2000, () => {
                     dbCountNumber.classList.add('count-pop');
                 });
-                
-                // Mark as done so it doesn't happen again
                 hasInitialAnimationRun = true;
-                
             } else {
-                // SCENARIO 2: Update after upload (No counting, just update)
+                // Update after upload
                 const currentVal = parseInt(dbCountNumber.textContent.replace(/,/g, '')) || 0;
-                
-                // Only act if the number actually changed
                 if (finalCount !== currentVal) {
                     dbCountNumber.innerHTML = finalCount.toLocaleString();
-                    
-                    // Re-trigger the pop animation
                     dbCountNumber.classList.remove('count-pop');
-                    void dbCountNumber.offsetWidth; // Force browser reflow to restart animation
+                    void dbCountNumber.offsetWidth; 
                     dbCountNumber.classList.add('count-pop');
                 }
             }
@@ -164,19 +225,14 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
     
-    // Helper to animate numbers with commas (e.g. 0 -> 1,200)
     function animateValueWithCommas(obj, start, end, duration, onComplete) {
         let startTimestamp = null;
         const step = (timestamp) => {
             if (!startTimestamp) startTimestamp = timestamp;
             const progress = Math.min((timestamp - startTimestamp) / duration, 1);
-            
-            // Easing function (easeOutQuad) for a smooth slow-down at the end
             const easeProgress = 1 - (1 - progress) * (1 - progress);
-            
             const currentVal = Math.floor(easeProgress * (end - start) + start);
             
-            // Format with commas
             obj.innerHTML = currentVal.toLocaleString();
             
             if (progress < 1) {
@@ -189,12 +245,7 @@ document.addEventListener('DOMContentLoaded', () => {
         window.requestAnimationFrame(step);
     }
 
-    // Call stats immediately on load
-    fetchDatabaseStats();
-
-
-    // --- Uploader Event Listeners ---
-    
+    // Uploader Event Listeners 
     browseBtn.addEventListener('click', (e) => {
         e.stopPropagation(); 
         fileInput.click();
@@ -232,7 +283,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // --- File Handling ---
+    // File Handling 
     function handleFile(file) {
         if (!file.type.startsWith('image/')) {
             alert('Please upload an image file.');
@@ -264,7 +315,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }, 100); 
     }
 
-    // --- Control Button Event Listeners ---
+    // Control Button Event Listeners 
     searchBtn.addEventListener('click', () => {
         if (currentFile) {
             uploadControls.classList.add('hidden'); 
@@ -292,7 +343,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // --- Carousel Event Listeners ---
+    // Carousel Event Listeners 
     carouselNext.addEventListener('click', () => {
         const maxIndex = Math.max(0, totalItems - itemsPerPage); 
         if (currentIndex < maxIndex) {
@@ -308,7 +359,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // --- About Page CTA Listener ---
+    // About Page CTA Listener 
     if (ctaTryNowBtn) {
         ctaTryNowBtn.addEventListener('click', (e) => {
             e.preventDefault();
@@ -317,7 +368,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // --- Privacy Link Listeners ---
+    // Privacy Link Listeners 
     function handlePrivacyLinkClick(e) {
         e.preventDefault();
         const aboutLink = document.querySelector('.nav-link[data-tab="about"]');
@@ -344,7 +395,7 @@ document.addEventListener('DOMContentLoaded', () => {
         aboutPrivacyLink.addEventListener('click', handleManageDataLinkClick);
     }
 
-    // --- Image Preloader Function ---
+    // Image Preloader Function 
     function preloadImages(urls) {
         const promises = urls.map(url => {
             return new Promise((resolve) => {
@@ -360,7 +411,7 @@ document.addEventListener('DOMContentLoaded', () => {
         return Promise.all(promises);
     }
 
-    // --- API Search Function ---
+    // API Search Function 
     async function uploadAndSearch(file) {
         console.log('Uploading file:', file.name);
 
@@ -392,7 +443,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (!response.ok) {
                 const errData = await response.json();
-                // Check specifically for the "No face detected" 400 error
                 if (response.status === 400) {
                     throw new Error("NO_FACE"); 
                 }
@@ -401,18 +451,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const data = await response.json();
 
-            // Refresh stats if we consented (count might have increased)
+            // Refresh stats if we consented
             if (consentCheckbox.checked && data.uuid) {
-                // Wait a moment for sidecar to update
                 setTimeout(fetchDatabaseStats, 1000);
             }
 
             if (!data.results || data.results.length === 0) {
                 console.log("No results returned from API.");
                 displayResults([]); 
-                
                 loader.classList.add('hidden'); 
-            
                 resetControls.classList.remove('hidden'); 
                 return;
             }
@@ -428,10 +475,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const imageUrls = fixedResults.map(result => result.url);
             console.log("Preloading images...", imageUrls);
             await preloadImages(imageUrls);
-            console.log("All images preloaded.");
             
             loader.classList.add('hidden');
-            
             displayResults(fixedResults); 
 
             if (data.uuid) {
@@ -451,7 +496,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
             resultsSection.classList.remove('hidden'); 
 
-            // Handle Specific Errors
             if (error.message === "NO_FACE") {
                 resultsHeader.classList.add('hidden');
                 searchErrorMessage.classList.remove('hidden');
@@ -468,7 +512,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // --- Display Functions ---
+    // Display Functions 
     function displayResults(results) {
         carouselTrack.innerHTML = ''; 
 
@@ -486,7 +530,6 @@ document.addEventListener('DOMContentLoaded', () => {
         topResultContainer.classList.remove('hidden');
         topResultImageWrapper.innerHTML = `<img src="${topResult.url}" alt="Top Similar Image" data-fullsrc="${topResult.url}">`;
         
-        // This helper (animateCount) is for the match percentage
         animateCount(matchPercentageNumber, topResult.similarity, 1000); 
         setMatchPercentageStyle(matchPercentageNumber, topResult.similarity);
         
@@ -532,11 +575,10 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         
         carouselTrack.style.width = null; 
-
         updateCarouselPosition(); 
     }
 
-    // --- Carousel Helper Functions ---
+    // Carousel Helper Functions 
     function updateCarouselPosition() {
         const safeItemsPerPage = Math.max(1, itemsPerPage);
         const itemWidthPercent = 100 / safeItemsPerPage;
@@ -560,7 +602,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
     
-    // Animation for Match Percentage (Simple integer count)
     function animateCount(element, target, duration) {
         const finalTarget = parseInt(target, 10) || 0;
         const startTime = performance.now();
@@ -568,12 +609,9 @@ document.addEventListener('DOMContentLoaded', () => {
         function step(currentTime) {
             const elapsedTime = currentTime - startTime;
             const progress = Math.min(elapsedTime / duration, 1);
-            
             const easedProgress = progress * (2 - progress);
-            
             const current = Math.floor(easedProgress * finalTarget);
             element.textContent = current;
-
             if (progress < 1) {
                 requestAnimationFrame(step);
             } else {
@@ -590,7 +628,7 @@ document.addEventListener('DOMContentLoaded', () => {
         else element.classList.add('match-red');
     }
 
-    // --- Reset Function ---
+    // Reset Function 
     function resetApp() {
         currentFile = null;
         fileInput.value = null; 
@@ -627,7 +665,7 @@ document.addEventListener('DOMContentLoaded', () => {
         searchErrorMessage.classList.add('hidden');
     }
 
-    // --- Image Modal Functionality ---
+    // Image Modal Functionality 
     function openModal(imageSrc) {
         modalImage.src = imageSrc;
         imageModal.classList.add('active');
@@ -648,7 +686,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (e.key === 'Escape' && imageModal.classList.contains('active')) closeModal();
     });
 
-    // --- DELETE FORM LOGIC ---
+    // Delete form logic
     if (deleteForm) {
         deleteForm.addEventListener('submit', async (e) => {
             e.preventDefault();
@@ -674,7 +712,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (response.ok) {
                     showDeleteMessage(data.message, 'success');
                     uuidInput.value = ''; 
-                    // Refresh stats if an image was deleted (Update, no full count-up)
                     setTimeout(fetchDatabaseStats, 1000);
                 } else {
                     throw new Error(data.detail || "An unknown error occurred.");
@@ -698,7 +735,7 @@ document.addEventListener('DOMContentLoaded', () => {
         deleteMessage.classList.add(type); 
     }
 
-    // --- Scroll Animations for About Page ---
+    // Scroll Animations 
     const animatedElements = document.querySelectorAll('.animate-on-scroll');
     if ("IntersectionObserver" in window) {
         const observer = new IntersectionObserver((entries, obs) => {

@@ -147,7 +147,7 @@ class SCR_Face_Detector:
 
         if best_results:
             # Choose the best face among all detections
-            final_result = self._select_primary_face(best_results, working_image.size)
+            final_result = self._select_primary_face(best_results)
         else:
             return None
 

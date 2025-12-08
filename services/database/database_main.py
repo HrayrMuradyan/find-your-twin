@@ -1,5 +1,4 @@
 from fastapi import FastAPI, HTTPException, Body
-from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 import logging
@@ -26,14 +25,6 @@ logger = logging.getLogger("DatabaseService")
 CONFIG = load_config()
 
 app = FastAPI(title="Database & Search Service")
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
 # Global Vector DB Instance
 vectordb: VectorDB = None

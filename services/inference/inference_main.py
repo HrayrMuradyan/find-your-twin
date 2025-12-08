@@ -210,10 +210,6 @@ async def get_stats():
 def read_root():
     return {"status": "Inference Service Online"}
 
-@app.get("/health")
-def health_check():
-    return {"status": "ok"}
-
 if __name__ == "__main__":
     # Read port from env, default to 7860
     port = int(os.getenv("INFERENCE_PORT", 7860))

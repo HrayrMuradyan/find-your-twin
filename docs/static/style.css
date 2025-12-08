@@ -1,4 +1,4 @@
-/* --- Global & Variables --- */
+/* Global & Variables */
 :root {
     --primary-color: #008080; 
     --primary-dark: #006a6a;
@@ -40,6 +40,274 @@ body {
     -moz-osx-font-smoothing: grayscale;
 }
 
+#startup-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(245, 247, 250, 0.5); 
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: opacity 0.8s cubic-bezier(0.16, 1, 0.3, 1), visibility 0.8s;
+}
+
+#startup-overlay.fade-out {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+}
+
+.overlay-card {
+    background: #ffffff;
+    border-radius: 24px;
+    box-shadow: 
+        0 20px 50px -12px rgba(0, 0, 0, 0.15),
+        0 0 0 1px rgba(0, 0, 0, 0.05);
+    width: 90%;
+    max-width: 420px;
+    overflow: hidden;
+    
+    opacity: 0;
+    transform: scale(0.92) translateY(10px);
+    animation: cardEntrance 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Header Section */
+.overlay-header {
+    padding: 2.5rem 2rem 1.5rem 2rem;
+    text-align: center;
+    background: linear-gradient(to bottom, #ffffff, #fcfcfc);
+}
+
+.overlay-header h2 {
+    font-size: 1.6rem;
+    font-weight: 700;
+    color: var(--text-color);
+    margin-bottom: 1.5rem;
+    letter-spacing: -0.5px;
+    
+    opacity: 0;
+    transform: translateY(10px);
+    animation: elementFadeUp 0.6s ease-out 0.2s forwards;
+}
+
+/* Video Container */
+.startup-media {
+    width: 100%;
+    height: 160px;
+    border-radius: 16px;
+    overflow: hidden;
+    margin-bottom: 1.5rem;
+    background-color: #f0f2f5;
+    position: relative;
+    box-shadow: 0 10px 30px -10px rgba(0,0,0,0.1);
+    opacity: 0;
+    transform: translateY(10px);
+    animation: elementFadeUp 0.6s ease-out 0.3s forwards;
+}
+
+.startup-media video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    transition: transform 5s ease; 
+}
+.startup-media:hover video {
+    transform: scale(1.05);
+}
+
+.overlay-subtext {
+    font-size: 0.9rem;
+    color: var(--text-color-light);
+    line-height: 1.6;
+    margin-bottom: 0.5rem;
+    opacity: 0;
+    animation: elementFadeUp 0.6s ease-out 0.4s forwards;
+}
+
+/* Status List Section */
+.status-list {
+    background-color: #fafbfc;
+    border-top: 1px solid #edf2f7;
+    padding: 1.5rem 2rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.status-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.85rem 1rem;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    opacity: 0;
+    transform: translateX(-10px);
+}
+
+/* Animation Delays for List Items */
+#status-inference { animation: listSlideIn 0.6s ease-out 0.5s forwards; }
+#status-db { animation: listSlideIn 0.6s ease-out 0.6s forwards; }
+
+.status-item.active {
+    border-color: rgba(40, 167, 69, 0.4);
+    background-color: rgba(40, 167, 69, 0.04);
+    box-shadow: 0 4px 15px rgba(40, 167, 69, 0.1);
+    transform: scale(1.02); 
+}
+
+.status-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.status-label {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text-color);
+    transition: color 0.3s ease;
+}
+
+.status-item.active .status-label {
+    color: var(--match-green);
+}
+
+.status-detail {
+    font-size: 0.75rem;
+    color: var(--gray-medium);
+}
+
+.status-indicator {
+    position: relative;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Ring Loader */
+.loader-ring {
+    width: 22px;
+    height: 22px;
+    border: 2px solid rgba(0, 128, 128, 0.15); 
+    border-left-color: var(--primary-color);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    position: absolute;
+    transition: opacity 0.4s, transform 0.4s;
+}
+
+.status-item.active .loader-ring {
+    opacity: 0;
+    transform: scale(0.5);
+}
+
+/* SVG Checkmark */
+.checkmark {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    display: block;
+    stroke-width: 2.5;
+    stroke: #fff;
+    stroke-miterlimit: 10;
+    box-shadow: inset 0px 0px 0px var(--match-green);
+    opacity: 0;
+    transform: scale(0.5) rotate(-45deg); 
+    transition: all 0.5s cubic-bezier(0.34, 1.56, 0.64, 1); 
+}
+
+.checkmark-circle {
+    stroke-dasharray: 166;
+    stroke-dashoffset: 166;
+    stroke-width: 2;
+    stroke-miterlimit: 10;
+    stroke: var(--match-green);
+    fill: none;
+}
+
+.checkmark-check {
+    transform-origin: 50% 50%;
+    stroke-dasharray: 48;
+    stroke-dashoffset: 48;
+}
+
+/* Success State Trigger */
+.status-item.active .checkmark {
+    opacity: 1;
+    transform: scale(1) rotate(0deg);
+    box-shadow: inset 0px 0px 0px 30px var(--match-green);
+}
+
+.status-item.active .checkmark-check {
+    animation: stroke 0.4s cubic-bezier(0.65, 0, 0.45, 1) 0.2s forwards;
+}
+
+#startup-overlay.fade-out {
+    transform: translateY(-100%);
+    opacity: 1; 
+    visibility: visible; 
+    transition: 
+        transform 0.9s cubic-bezier(0.7, 0, 0.3, 1),
+        visibility 0.9s linear;
+}
+
+/* The Card (Moves with the curtain but faster) */
+#startup-overlay.fade-out .overlay-card {
+    opacity: 0;
+    transform: translateY(-50px);
+    transition: 
+        opacity 0.5s ease,
+        transform 0.5s ease;
+}
+
+/* The Main App (Already there, just coming into focus) */
+.blurred-content {
+    opacity: 1; 
+    filter: blur(15px);
+    pointer-events: none;
+    user-select: none;
+    transition: filter 1.2s ease-out;
+}
+
+.blurred-content.content-visible {
+    filter: blur(0);
+    pointer-events: auto;
+    user-select: auto;
+}
+
+
+@keyframes cardEntrance {
+    to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+@keyframes elementFadeUp {
+    to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes listSlideIn {
+    to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes stroke {
+    100% { stroke-dashoffset: 0; }
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
 .container { max-width: 1100px; margin: 0 auto; padding: 0 20px; }
 .hidden { display: none !important; }
 
@@ -72,14 +340,14 @@ body {
     font-weight: 600;
 }
 
-/* --- Tab Content --- */
+/* Tab Content */
 .tab-content { padding-top: 2.5rem; animation: fadeIn 0.5s ease-in-out; }
 @keyframes fadeIn {
     from { opacity: 0; transform: translateY(15px); }
     to { opacity: 1; transform: translateY(0); }
 }
 
-/* --- Hero Section --- */
+/* Hero Section */
 .hero-section { text-align: center; padding: 2rem 0; }
 .main-title { 
     font-size: 2.8rem; 
@@ -96,24 +364,43 @@ body {
     margin: 0 auto; 
 }
 
+/* Database Stats */
 .db-stats {
     display: inline-flex;
     align-items: center;
     gap: 10px;
-
+    
+    opacity: 0;
+    max-height: 0;
+    margin-top: 0;
+    padding: 0 2.2rem; 
+    border: 0px solid transparent; 
+    overflow: hidden;
+    transform: translateY(-20px);
+    
     background: #ffffff;
-    
-    border: 3px solid rgba(0, 83, 128, 0.05);
-    
-    padding: 0.8rem 2.2rem;
-    border-radius: 50px; 
-    margin-top: 2rem;
-    
     color: var(--text-color-light); 
     font-size: 1.3rem;
     font-weight: 500;
+    border-radius: 50px; 
     
-    animation: fadeInUp 1s ease-out;
+    transition: 
+        opacity 0.8s ease,
+        max-height 0.8s cubic-bezier(0.16, 1, 0.3, 1), 
+        margin 0.8s cubic-bezier(0.16, 1, 0.3, 1),
+        padding 0.8s cubic-bezier(0.16, 1, 0.3, 1),
+        transform 0.8s cubic-bezier(0.16, 1, 0.3, 1),
+        border-width 0.8s ease;
+}
+
+/* Active State: Expanded */
+.db-stats.stats-visible {
+    opacity: 1;
+    max-height: 100px; 
+    margin-top: 2rem;
+    padding: 0.8rem 2.2rem; 
+    border: 3px solid rgba(0, 83, 128, 0.05); 
+    transform: translateY(0);
 }
 
 .db-stats i {
@@ -127,12 +414,9 @@ body {
     font-weight: 700;
     line-height: 1;
     margin-left: 2px;
-    
-    /* Use the Primary Gradient from your theme variables */
     background: var(--primary-gradient); 
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
-    
     display: inline-block;
 }
 
@@ -239,7 +523,7 @@ body {
     display: none;
 }
 
-/* --- Buttons --- */
+/* Buttons */
 .btn {
     background-color: var(--primary-color);
     color: white;
@@ -297,7 +581,7 @@ body {
     border-color: var(--match-green);
 }
 
-/* --- Upload Controls --- */
+/* Upload Controls */
 #upload-controls {
     text-align: center;
     margin-top: 1.5rem;
@@ -347,7 +631,7 @@ body {
     100% { box-shadow: 0 0 0 0 rgba(0, 128, 128, 0); transform: scale(1); }
 }
 
-/* --- Uploader Preview --- */
+/* Uploader Preview */
 #upload-preview {
     position: absolute; top: 0; left: 0; width: 100%; height: 100%;
     display: none; align-items: center; justify-content: center;
@@ -369,7 +653,7 @@ body {
     box-shadow: none;
 }
 
-/* --- Results Section --- */
+/* Results Section */
 #results-section { padding: 2rem 0; }
 #results-section h3 { 
     font-size: 1.8rem; 
@@ -382,7 +666,7 @@ body {
     margin-top: 3.5rem; margin-bottom: 1.5rem; color: var(--text-color);
 }
 
-/* --- Top Result Container --- */
+/* Top Result Container */
 #top-result-container {
     display: flex; flex-direction: column; align-items: center;
     margin-bottom: 3rem; padding: 2rem;
@@ -410,7 +694,7 @@ body {
 }
 .percentage-symbol { font-size: 1.5rem; margin-left: 0.3rem; color: var(--text-color-light); }
 
-/* --- Percentage color classes --- */
+/* Percentage color classes */
 #match-percentage-number.match-green, .result-match-small.match-green { color: var(--match-green); }
 #match-percentage-number.match-orange, .result-match-small.match-orange { color: var(--match-orange); }
 #match-percentage-number.match-red, .result-match-small.match-red { color: var(--match-red); }
@@ -469,7 +753,7 @@ body {
 
 #results-grid { display: none; }
 
-/* --- Loader --- */
+/* Loader */
 #loader { text-align: center; padding: 2rem; }
 .spinner {
     border: 5px solid var(--primary-light); border-top: 5px solid var(--primary-color);
@@ -492,7 +776,7 @@ body {
     100% { background-position: -200% 0; }
 }
 
-/* --- Reset Controls --- */
+/* Reset Controls */
 #reset-controls {
     text-align: center;
     margin-top: 3rem;
@@ -520,7 +804,7 @@ body {
     color: var(--primary-dark); word-wrap: break-word; 
 }
 
-/* --- Info/About Tab Box --- */
+/* Info/About Tab Box */
 .info-box { 
     background-color: var(--surface-color);
     border: 1px solid var(--border-color);
@@ -538,11 +822,7 @@ body {
 .info-box p, .info-box li { margin-bottom: 1rem; line-height: 1.7; }
 .info-box ol, .info-box ul { padding-left: 1.25rem; }
 
-/* ============================================== */
-/* === "ABOUT" & "MANAGE DATA" PAGE STYLES === */
-/* ============================================== */
-
-/* --- Page Containers --- */
+/* Page Containers */
 .about-page-container,
 .manage-data-container {
     padding: 0; 
@@ -553,7 +833,7 @@ body {
     box-shadow: none;
 }
 
-/* --- About Page: Hero --- */
+/* About Page: Hero */
 .about-hero {
     text-align: center;
     padding: 2.5rem;
@@ -586,7 +866,7 @@ body {
     max-width: 600px; margin: 0 auto 1.5rem auto; line-height: 1.6;
 }
 
-/* --- Sectioning --- */
+/* Sectioning */
 .about-section { 
     padding: 3rem 2.5rem; 
     margin-top: 2rem;
@@ -608,7 +888,7 @@ body {
     width: 50px; height: 4px; background-color: var(--primary-color); border-radius: 2px;
 }
 
-/* --- How it Works Grid --- */
+/* How it Works Grid */
 .how-it-works-grid {
     display: grid; grid-template-columns: 1fr;
     gap: 2.5rem; align-items: center;
@@ -640,7 +920,7 @@ body {
 .modern-list li strong { display: block; color: var(--text-color); font-size: 1.1rem; }
 .modern-list li div { font-size: 0.95rem; color: var(--text-color-light); }
 
-/* --- About: Privacy Box --- */
+/* About: Privacy Box */
 .privacy-highlight-box {
     background-color: var(--background-color); 
     border: 1px solid var(--border-color);
@@ -661,7 +941,7 @@ body {
     font-size: 1rem;
 }
 
-/* --- About: Tech Stack --- */
+/* About: Tech Stack */
 .tech-stack-grid {
     display: grid; grid-template-columns: 1fr;
     gap: 1.5rem; padding: 0;
@@ -693,7 +973,7 @@ body {
 }
 .card li strong { color: var(--text-color); }
 
-/* --- About: Developer & Footer --- */
+/* About: Developer & Footer */
 .developer-card {
     display: flex; flex-direction: column; align-items: center; text-align: center;
     background-color: var(--background-color);
@@ -739,7 +1019,7 @@ body {
 }
 .about-privacy-link:hover { text-decoration: underline; }
 
-/* --- Scroll Animations --- */
+/* Scroll Animations */
 .animate-on-scroll {
     opacity: 0; transform: translateY(30px);
     transition: opacity 0.6s ease-out, transform 0.6s ease-out;
@@ -752,7 +1032,7 @@ body {
 .card.animate-on-scroll:nth-child(even) { transition-delay: 0.1s; }
 .animate-on-scroll.is-visible { opacity: 1; transform: translateY(0); }
 
-/* --- Bottom Carousel (Example Dataset) --- */
+/* Bottom Carousel */
 .carousel-section {
     width: 100%; padding: 3rem 0; background-color: var(--surface-color);
     margin-top: 3rem; border-top: 1px solid var(--border-color);
@@ -778,7 +1058,7 @@ body {
     100% { transform: translateX(calc(-200px * 8)); } 
 }
 
-/* --- Footer --- */
+/* Footer */
 .footer {
     text-align: center; padding: 2.5rem 0; margin-top: 2rem;
     border-top: 1px solid var(--border-color);
@@ -786,7 +1066,7 @@ body {
     background-color: var(--surface-color);
 }
 
-/* --- Image Modal (Lightbox) --- */
+/* Image Modal */
 .modal {
     display: none; position: fixed; z-index: 2000;
     left: 0; top: 0; width: 100%; height: 100%;
@@ -812,11 +1092,6 @@ body {
 .modal-close-btn:focus { color: #bbb; transform: scale(1.1); }
 @keyframes fadeInModal { from {opacity: 0} to {opacity: 1} }
 @keyframes zoomInModal { from {transform: scale(0.8) translateY(20px); opacity: 0;} to {transform: scale(1) translateY(0); opacity: 1;} }
-
-
-/* =================================================== */
-/* === "MANAGE DATA" TAB STYLES === */
-/* =================================================== */
 
 .manage-data-container {
     padding: 2.5rem;
@@ -943,7 +1218,10 @@ body {
     border: 1px solid var(--match-red);
 }
 
-.how-it-works-deletion { text-align: left; }
+.how-it-works-deletion {
+    text-align: left;
+}
+
 .how-it-works-deletion h3 {
     text-align: left;
     font-size: 1.5rem;
@@ -951,4 +1229,7 @@ body {
     font-weight: 600;
     color: var(--text-color);
 }
-.how-it-works-deletion .modern-list { margin: 0; padding-left: 0; }
+.how-it-works-deletion .modern-list { 
+    margin: 0;
+    padding-left: 0;
+}
