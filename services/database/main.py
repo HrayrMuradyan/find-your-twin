@@ -9,6 +9,11 @@ import uvicorn
 import psycopg2 
 import os
 
+from dotenv import load_dotenv 
+
+# Load the variables from .env 
+load_dotenv()
+
 # Add project root to path to allow importing from 'src'
 script_dir = Path(__file__).parent
 PROJECT_ROOT = script_dir.parent
@@ -27,9 +32,29 @@ CONFIG = load_config()
 
 app = FastAPI(title="Database & Search Service")
 
+DATABASE_PORT = os.getenv("DATABASE_PORT", "8800")
+INFERENCE_PORT = os.getenv("INFERENCE_PORT", "7860")
+FRONTEND_PORT = os.getenv("FRONTEND_PORT", "8000")
+
+allowed_origins = [
+    # Local Development
+    f"http://localhost:{DATABASE_PORT}",
+    f"http://127.0.0.1:{DATABASE_PORT}",
+    f"http://localhost:{INFERENCE_PORT}",
+    f"http://127.0.0.1:{INFERENCE_PORT}",
+    f"http://localhost:{FRONTEND_PORT}",
+    f"http://127.0.0.1:{FRONTEND_PORT}",
+    
+    # Deployed
+    "https://hrayrmuradyan-find-your-twin-inference.hf.space",
+    "https://hrayrmuradyan-find-your-twin-database.hf.space",
+    
+    "https://hrayrmuradyan.com",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  
+    allow_origins=allowed_origins,  
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

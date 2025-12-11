@@ -8,6 +8,11 @@ from pathlib import Path
 import logging
 import os
 
+from dotenv import load_dotenv 
+
+# Load the variables from .env 
+load_dotenv()
+
 # Add project root to sys.path to be able to import from src
 import sys
 script_dir = Path(__file__).parent
@@ -35,9 +40,22 @@ CONFIG = load_config()
 # App initialization and CORS
 app = FastAPI(title="Inference Service")
 
+INFERENCE_PORT = os.getenv("INFERENCE_PORT", "7860")
+FRONTEND_PORT = os.getenv("FRONTEND_PORT", "8000")
+
+allow_origins = [
+    f"http://localhost:{FRONTEND_PORT}",
+    f"http://127.0.0.1:{FRONTEND_PORT}",
+    f"http://localhost:{INFERENCE_PORT}",
+    f"http://127.0.0.1:{INFERENCE_PORT}",
+
+    "https://hrayrmuradyan.com/",
+    "https://hrayrmuradyan-find-your-twin-inference.hf.space"
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], 
+    allow_origins=allow_origins, 
     allow_credentials=True,
     allow_methods=["*"], 
     allow_headers=["*"], 
