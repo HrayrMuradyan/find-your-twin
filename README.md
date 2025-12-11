@@ -11,6 +11,8 @@ Author: Hrayr Muradyan
 
 This project implements a robust Face Similarity Search Engine designed to find "visual twins" or look-alikes from a large dataset of faces.
 
+![Demo](docs/static/vids/demo.gif)
+
 #### How It Works
 
 The system is built as a microservices-style application:

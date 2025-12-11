@@ -260,7 +260,7 @@ def upload_bytes_to_folder(service,
         media = MediaIoBaseUpload(
             io.BytesIO(file_bytes),
             mimetype=mime_type,
-            resumable=True
+            resumable=False
         )
         
         logging.info("Uploading %s (from memory) to Drive folder...", blur_str(file_name))

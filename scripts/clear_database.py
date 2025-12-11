@@ -54,7 +54,7 @@ def clear_database():
         cursor = conn.cursor()
         
         # Drop the tables
-        tables_to_drop = ["face_data", "index_config"]
+        tables_to_drop = ["face_data", "index_metadata"]
         
         for table in tables_to_drop:
             logging.info(f"Dropping table '{table}'...")

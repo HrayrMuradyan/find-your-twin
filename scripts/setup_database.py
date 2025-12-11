@@ -65,6 +65,7 @@ CREATE_TABLES = [
     CREATE TABLE IF NOT EXISTS face_data (
         id SERIAL PRIMARY KEY,
         source TEXT NOT NULL,
+        original_filename TEXT NOT NULL,
         drive_file_id TEXT NOT NULL,
         created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
         embedding vector(512)
