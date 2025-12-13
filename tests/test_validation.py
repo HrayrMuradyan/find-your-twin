@@ -1,7 +1,6 @@
 import pytest
 import json
-from pathlib import Path
-import src.validation as validator
+import find_your_twin.validation as validator
 
 REQUIRED_KEYS = ["model_name", "class", "module", "parameters"]
 

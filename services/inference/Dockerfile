@@ -3,33 +3,29 @@ FROM python:3.10-slim
 
 WORKDIR /app
 
-# Install system dependencies for OpenCV and others
+# Install System Dependencies
 RUN apt-get update && apt-get install -y \
     libgl1 \
     libglib2.0-0 \
+    gcc \
+    python3-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements
-COPY services/inference/requirements.txt /app/requirements.txt
-RUN pip install --no-cache-dir -r requirements.txt && \
+# Copy Project Definition & Source Code
+COPY pyproject.toml .
+COPY src/ src/
+
+# Install the Package with [inference] dependencies
+RUN pip install --no-cache-dir ".[inference]" && \
     pip install scrfd --no-deps
 
-# Copy the shared source code
-COPY src/ /app/src/
-COPY pyproject.toml /app/pyproject.toml
-COPY configs/ /app/configs/
-COPY models/ /app/models/
-
-# This is to ensure deepface takes the downloaded weights
-ENV DEEPFACE_HOME=/app/models/embeddings/deepface
-
-# Copy the service code
+COPY configs/ configs/
+COPY models/ models/
 COPY services/inference/main.py /app/main.py
 
-# Set paths for safety
-ENV PYTHONPATH=/app
-# Default port if not passed by env
+# Environment Config
+ENV DEEPFACE_HOME=/app/models/embeddings/deepface
 ENV INFERENCE_PORT=7860
 
-# Run the application
+# Run Application
 CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${INFERENCE_PORT}"]

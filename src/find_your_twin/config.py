@@ -2,7 +2,7 @@ from pathlib import Path
 import yaml
 import tomli
 
-PROJECT_ROOT = Path(__file__).parent.parent
+PROJECT_ROOT = Path.cwd()
 
 def get_config_path() -> str:
     """

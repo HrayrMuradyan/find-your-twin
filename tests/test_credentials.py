@@ -1,7 +1,6 @@
-import pytest
 import logging
 from unittest.mock import patch
-from src.credentials import setup_google_credentials 
+from find_your_twin.credentials import setup_google_credentials 
 
 def test_setup_credentials_success(tmp_path, monkeypatch, caplog):
     """Verifies that environment variables are correctly read and written to the credentials files."""

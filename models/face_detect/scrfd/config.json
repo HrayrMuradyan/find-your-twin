@@ -1,7 +1,7 @@
 {
     "model_name": "scrfd_face_detector",
     "class": "SCR_Face_Detector",
-    "module": "src.face_detection",
+    "module": "find_your_twin.face_detection",
     "parameters": {
         "model_path": "scrfd.onnx",
         "detection_probability": 0.5,

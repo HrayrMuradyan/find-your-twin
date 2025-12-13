@@ -1,12 +1,9 @@
 from pathlib import Path
-import sys
-script_dir = Path(__file__).parent
-PROJECT_ROOT = script_dir.parent
-sys.path.append(str(PROJECT_ROOT))
-from src.image import read_image
 import math
 import numpy as np
 from PIL import Image
+
+from find_your_twin.image import read_image
 
 class SCR_Face_Detector:
     def __init__(self,

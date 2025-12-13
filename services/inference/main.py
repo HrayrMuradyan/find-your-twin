@@ -13,23 +13,19 @@ from dotenv import load_dotenv
 # Load the variables from .env 
 load_dotenv()
 
-# Add project root to sys.path to be able to import from src
-import sys
 script_dir = Path(__file__).parent
-PROJECT_ROOT = script_dir.parent
-sys.path.append(str(PROJECT_ROOT))
 
 # Import custom modules 
-from src.embeddings_database import DatabaseServiceClient
-from src.google_drive import (
+from find_your_twin.embeddings_database import DatabaseServiceClient
+from find_your_twin.google_drive import (
     get_drive_service,
     get_or_create_app_folder,
     get_image_bytes_by_id
 )
-from src.config import load_config
-from src.image import resize_image
-from src.logging_config import setup_logging
-from src.credentials import setup_google_credentials
+from find_your_twin.config import load_config
+from find_your_twin.image import resize_image
+from find_your_twin.logging_config import setup_logging
+from find_your_twin.credentials import setup_google_credentials
 
 # Setup logger and config
 setup_logging()

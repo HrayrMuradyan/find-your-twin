@@ -1,10 +1,9 @@
 from pathlib import Path
-import sys
-script_dir = Path(__file__).parent
-PROJECT_ROOT = script_dir.parent
-sys.path.append(str(PROJECT_ROOT))
-from src.file import read_json
-from src.utils import import_attr
+
+from find_your_twin.config import PROJECT_ROOT
+from find_your_twin.file import read_json
+from find_your_twin.utils import import_attr
+
 import logging
 logger = logging.getLogger(__name__)
 

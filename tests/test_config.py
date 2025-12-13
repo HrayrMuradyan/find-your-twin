@@ -1,12 +1,7 @@
-import sys
-from pathlib import Path
-script_dir = Path(__file__).parent
-PROJECT_ROOT = script_dir.parent
-sys.path.append(str(PROJECT_ROOT))
 import pytest
 import yaml
 
-from src import config
+from find_your_twin import config
 
 @pytest.fixture
 def mock_root(tmp_path, monkeypatch):

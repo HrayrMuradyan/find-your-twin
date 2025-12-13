@@ -14,14 +14,9 @@ from dotenv import load_dotenv
 # Load the variables from .env 
 load_dotenv()
 
-# Add project root to path to allow importing from 'src'
-script_dir = Path(__file__).parent
-PROJECT_ROOT = script_dir.parent
-sys.path.append(str(PROJECT_ROOT))
-
-from src.search_engine import VectorDB
-from src.logging_config import setup_logging
-from src.config import load_config
+from find_your_twin.search_engine import VectorDB
+from find_your_twin.logging_config import setup_logging
+from find_your_twin.config import load_config
 
 # Setup logging
 setup_logging()

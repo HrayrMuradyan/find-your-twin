@@ -3,28 +3,24 @@ FROM python:3.10-slim
 
 WORKDIR /app
 
-# Required system dependencies for FAISS and Postgres
+# Install System Dependencies
 RUN apt-get update && apt-get install -y \
     libgomp1 \
     libpq-dev \
+    gcc \
+    python3-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements and install them
-COPY services/database/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Copy Project Definition & Source Code
+COPY pyproject.toml .
+COPY src/ src/
 
-# Copy the shared source code
-COPY src/ /app/src/
-COPY pyproject.toml /app/pyproject.toml
-COPY configs /app/configs
+# Install the Package with [database] dependencies
+RUN pip install --no-cache-dir ".[database]"
 
-# Copy the service code
+COPY configs configs
 COPY services/database/main.py /app/main.py
 
-# Set python path to root so imports work
-ENV PYTHONPATH=/app
-# Default port if not passed by env
 ENV DATABASE_PORT=8800
 
-# Run the application
 CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${DATABASE_PORT}"]

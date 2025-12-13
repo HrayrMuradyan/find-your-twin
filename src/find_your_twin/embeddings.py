@@ -3,15 +3,11 @@ from pathlib import Path
 import numpy as np
 from deepface import DeepFace
 from deepface.modules import preprocessing
-import sys
 from PIL import Image
 import logging
 
 # Assuming project structure context for imports
-script_dir = Path(__file__).parent
-PROJECT_ROOT = script_dir.parent
-sys.path.append(str(PROJECT_ROOT))
-from src.image import read_image
+from find_your_twin.image import read_image
 
 logger = logging.getLogger(__name__)
 

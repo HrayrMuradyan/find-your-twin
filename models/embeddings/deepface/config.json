@@ -1,7 +1,7 @@
 {
     "model_name": "deepface_embeddings",
     "class": "DeepFaceEmbedder",
-    "module": "src.embeddings",
+    "module": "find_your_twin.embeddings",
     "parameters": {
         "model_name":"ArcFace",
         "dim": 512,

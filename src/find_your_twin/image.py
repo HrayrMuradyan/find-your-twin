@@ -2,8 +2,13 @@ from pathlib import Path
 from typing import Union
 import cv2
 import numpy as np
-import matplotlib.pyplot as plt
 from PIL import Image
+
+# Import matplotlib only if it is installed
+try:
+    import matplotlib.pyplot as plt
+except ImportError:
+    plt = None
 
 import logging
 logger = logging.getLogger(__name__)
@@ -38,6 +43,10 @@ def show_image(img: Union[str, Path, np.ndarray]):
     Args:
         img (str, Path, or np.ndarray): Image to display. Can be a file path or an array.
     """
+    if plt is None:
+        print("Matplotlib is not installed. Skipping visualization.")
+        return
+
     if isinstance(img, (str, Path)):
         img = read_image(img)
     elif not isinstance(img, np.ndarray):

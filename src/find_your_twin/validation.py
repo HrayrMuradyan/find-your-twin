@@ -1,9 +1,6 @@
 from pathlib import Path
-import sys
-script_dir = Path(__file__).parent
-PROJECT_ROOT = script_dir.parent
-sys.path.append(str(PROJECT_ROOT))
-from src.file import read_json
+
+from find_your_twin.file import read_json
 
 REQUIRED_KEYS = ["model_name", "class", "module", "parameters"]
 

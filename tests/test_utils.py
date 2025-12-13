@@ -1,6 +1,6 @@
 import pytest
 import math
-import src.utils as utils
+import find_your_twin.utils as utils
 
 def test_import_attr_success():
     """Verifies that a valid attribute is correctly imported from an existing standard library module."""

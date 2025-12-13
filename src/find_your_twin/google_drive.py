@@ -13,12 +13,8 @@ import logging
 logger = logging.getLogger(__name__)
 
 from pathlib import Path
-import sys
-script_dir = Path(__file__).parent
-PROJECT_ROOT = script_dir.parent
-sys.path.append(str(PROJECT_ROOT))
-
-from src.utils import blur_str
+from find_your_twin.config import PROJECT_ROOT
+from find_your_twin.utils import blur_str
 
 load_dotenv()
 

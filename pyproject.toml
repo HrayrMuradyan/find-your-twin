@@ -1,2 +1,52 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "find-your-twin"
+version = "0.1.0"
+description = "Face Similarity Service"
+requires-python = ">=3.10"
+
+# Base Dependencies
+dependencies = [
+    "colorlog==4.8.0",
+    "numpy==1.24.3",
+    "protobuf==4.25.3",
+    "python-dotenv==1.2.1",       
+    "PyYAML==6.0.3",
+    "tomli==2.3.0",
+    "fastapi",
+    "uvicorn==0.38.0",
+    "python-multipart==0.0.20",
+    "pillow==12.0.0"
+]
+
+# Service-Specific Dependencies
+[project.optional-dependencies]
+inference = [
+    "deepface==0.0.95",
+    "google-api-core==2.28.1",
+    "google-auth==2.41.1",
+    "google-auth-oauthlib==1.0.0",
+    "google-api-python-client==2.187.0",
+    "tensorflow==2.13.1",
+    "onnxruntime",
+    "httpx"
+]
+
+database = [
+    "faiss-cpu",
+    "psycopg2-binary==2.9.11"
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
 [tool.find_your_twin]
 config_path = "configs/main.yaml"
+
+[tool.coverage.run]
+omit = [
+    "*/logging_config.py", 
+]

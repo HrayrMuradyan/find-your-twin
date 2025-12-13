@@ -2,8 +2,8 @@ import pytest
 import numpy as np
 from pathlib import Path
 from PIL import Image
-import src.embeddings as embeddings
-from src.embeddings import DeepFaceEmbedder
+import find_your_twin.embeddings as embeddings
+from find_your_twin.embeddings import DeepFaceEmbedder
 
 class MockDeepFaceModel:
     """Simulates the DeepFace model object."""

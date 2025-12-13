@@ -10,17 +10,12 @@ from dotenv import load_dotenv
 from PIL import Image
 from fastapi.concurrency import run_in_threadpool
 
-# Add the project root to the path
-import sys
-script_dir = Path(__file__).parent
-PROJECT_ROOT = script_dir.parent
-sys.path.append(str(PROJECT_ROOT))
-
 # Import helpers
-from src.image import read_image
-from src.validation import validate_model
-from src.model import load_model, read_model_config
-from src.google_drive import upload_bytes_to_folder, get_file_by_uuid
+from find_your_twin.image import read_image
+from find_your_twin.validation import validate_model
+from find_your_twin.model import load_model, read_model_config
+from find_your_twin.google_drive import upload_bytes_to_folder, get_file_by_uuid
+from find_your_twin.config import PROJECT_ROOT
 
 logger = logging.getLogger(__name__)
 load_dotenv()

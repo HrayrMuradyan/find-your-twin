@@ -3,9 +3,9 @@ import numpy as np
 import psycopg2
 import os
 import json
-import logging
 from dotenv import load_dotenv
 
+import logging
 logger = logging.getLogger(__name__)
 load_dotenv()
 
