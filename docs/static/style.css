@@ -70,12 +70,15 @@ body {
         0 0 0 1px rgba(0, 0, 0, 0.05);
     width: 90%;
     max-width: 420px;
-    overflow: hidden;
+    
+    max-height: 95vh;
+    overflow-y: auto;
     
     opacity: 0;
     transform: scale(0.92) translateY(10px);
     animation: cardEntrance 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
+
 
 /* Header Section */
 .overlay-header {
@@ -1002,11 +1005,6 @@ body {
     .developer-img-placeholder { margin-bottom: 0; margin-right: 1.5rem; }
     .developer-info { margin-left: 0; }
 }
-.about-footer { padding: 2rem 0 0 0; }
-.about-footer .personal-signature {
-    text-align: center; font-size: 0.9rem; color: var(--gray-medium);
-    margin: 0; padding-top: 1.5rem; border-top: 1px solid var(--border-color);
-}
 .about-privacy-link {
     color: var(--primary-color);
     font-weight: 600;
@@ -1228,4 +1226,176 @@ body {
 .how-it-works-deletion .modern-list { 
     margin: 0;
     padding-left: 0;
+}
+
+
+@media (max-height: 750px) {
+    .overlay-card {
+        max-width: 360px;
+        border-radius: 16px;
+    }
+
+    .overlay-header {
+        padding: 1.2rem 1.5rem 0.5rem 1.5rem;
+    }
+
+    .overlay-header h2 {
+        font-size: 1.25rem; 
+        margin-bottom: 0.75rem;
+    }
+
+    .overlay-subtext {
+        font-size: 0.8rem; 
+        margin-bottom: 0.25rem;
+    }
+
+    .startup-media {
+        margin-bottom: 0.75rem; 
+        border-radius: 12px;
+    }
+
+    .status-list {
+        padding: 0.75rem 1.5rem 1rem 1.5rem;
+        gap: 0.5rem; 
+    }
+
+    .status-item {
+        padding: 0.6rem 0.8rem; 
+        border-radius: 10px;
+    }
+
+    .status-label {
+        font-size: 0.85rem;
+    }
+
+    .status-detail {
+        font-size: 0.7rem;
+    }
+}
+
+
+.mobile-menu-toggle {
+    display: none;
+    font-size: 2rem;
+    cursor: pointer;
+    color: var(--primary-color);
+}
+
+
+@media (max-width: 768px) {
+    .mobile-menu-toggle {
+        display: block;
+    }
+
+    .nav-links {
+        position: absolute;
+        top: 100%; 
+        left: 0;
+        width: 100%;
+        background-color: var(--surface-color);
+        border-bottom: 1px solid var(--border-color);
+        box-shadow: var(--shadow-medium);
+        padding: 1rem 0;
+        
+        opacity: 0;
+        visibility: hidden;
+        transform: translateY(-20px);
+        transition: all 0.3s ease-in-out;
+        z-index: 999;
+    }
+
+    .nav-links.active {
+        opacity: 1;
+        visibility: visible;
+        transform: translateY(0);
+    }
+
+    .nav-links ul {
+        flex-direction: column; 
+        align-items: center;
+        gap: 1.5rem;
+    }
+
+    .nav-links li {
+        margin-left: 0; 
+        width: 100%;
+        text-align: center;
+    }
+
+    .nav-links a {
+        display: block;
+        padding: 0.8rem 0;
+        font-size: 1.1rem;
+    }
+
+    .db-stats {
+        font-size: 1.1rem;
+    }
+
+    #db-count-number {
+        font-size: 1.45rem;
+    }
+
+    .manage-data-container {
+        background: transparent;
+        border: none;
+        box-shadow: none;
+        padding: 0 0.5rem; 
+        margin-top: 1rem;
+    }
+
+    .manage-data-container > h2 {
+        background: #fff;
+        margin: 0;
+        padding: 1.5rem 1.5rem 0.5rem 1.5rem;
+        border-radius: 16px 16px 0 0;
+        border: 1px solid var(--border-color);
+        border-bottom: none;
+        text-align: left; 
+        font-size: 1.6rem;
+    }
+
+    .manage-data-container > p {
+        background: #fff;
+        margin-bottom: 1.5rem;
+        padding: 0 1.5rem 1.5rem 1.5rem;
+        border-radius: 0 0 16px 16px;
+        border: 1px solid var(--border-color);
+        border-top: none;
+        box-shadow: var(--shadow-small);
+        text-align: left;
+    }
+
+    .delete-form-card,
+    .how-it-works-deletion, 
+    .manage-data-container .card {
+        background: #ffffff;
+        padding: 1.5rem;        
+        border-radius: 16px;
+        border: 1px solid var(--border-color);
+        box-shadow: var(--shadow-small);
+        margin-bottom: 1.5rem;   
+        margin-top: 0 !important; 
+    }
+
+    .delete-form-subtext {
+        margin: 1rem 0 1.5rem 0 !important; 
+    }
+    
+    .how-it-works-deletion h3 {
+        margin-top: 0;
+        margin-bottom: 1rem;
+    }
+
+    .tech-stack-grid .card {
+        background: transparent;
+        box-shadow: none;
+        border: none;
+        padding: 0;
+        margin-bottom: 2rem;
+    }
+
+    .tech-stack-grid .card:last-child {
+        margin-bottom: 0;
+    }
 }

@@ -26,10 +26,7 @@ ImageInput = Union[ImagePath, np.ndarray]
 
 class DatabaseServiceClient:
     """
-    Senior Pattern: Facade / Gateway
-    1. Performs compute-heavy ML tasks locally (Edge/Client side) without blocking the event loop.
-    2. Delegates data persistence and retrieval to the Backend Service.
-    3. Manages distributed transactions between Google Drive and Postgres/FAISS.
+    Main class of the inference service.
     """
 
     def __init__(self,
@@ -38,7 +35,9 @@ class DatabaseServiceClient:
                  drive_service: Optional[Any] = None,
                  drive_folder_id: Optional[str] = None):
         
-        # Service Configuration
+        # --- Get the database service URL ---
+        # inference service communicates with database service via that URL
+        
         hf_url = os.getenv("DATABASE_SERVICE_URL")
         db_port = os.getenv("DATABASE_PORT")
 
@@ -49,8 +48,17 @@ class DatabaseServiceClient:
 
         # Either locally or HF
         self.db_service_url = hf_url or f"http://host.docker.internal:{db_port}"
+
+        # Connect to the service
+        self.http_client = httpx.AsyncClient(
+            base_url=self.db_service_url,
+            timeout=30.0,
+            headers={}
+        )
         
-        # Drive Config
+        # --------------------------------------
+        
+        # Google Drive Config
         self.drive_service = drive_service
         self.drive_folder_id = drive_folder_id
 
@@ -63,29 +71,30 @@ class DatabaseServiceClient:
         self.face_detect_model_config = None
         self.embeddings_model_config = None
 
-        self.http_client = httpx.AsyncClient(
-            base_url=self.db_service_url,
-            timeout=30.0,
-            headers={}
-        )
 
     async def close(self):
         """Cleanup resources on app shutdown."""
         await self.http_client.aclose()
 
     async def get_index_count(self) -> Dict:
+        """Get the number of observations in the FAISS db"""
         try:
             resp = await self.http_client.get("/health")
             resp.raise_for_status()
+
+            # Returns: {"status": "ok", "count": N of observations}
             return resp.json()
+        
         except Exception as e:
-            logger.error(f"Health check failed: {e}")
+            logger.exception("Health check failed: %s", e)
             return {"count": 0}
 
     async def search_image(self, image: ImageInput, k: int = 5):
+        """Search closest matches for an image"""
         self._ensure_models_loaded()
         
         def _process_inference():
+            """Given an image detects a face and computes embeddings"""
             if isinstance(image, (str, Path)):
                 image_arr = read_image(image)
             else:
@@ -97,6 +106,8 @@ class DatabaseServiceClient:
             
             return self.embedder.compute_embeddings(face)
 
+        # Run the inference in threadpool
+        # So that it doesn't block other requests
         try:
             query_vector = await run_in_threadpool(_process_inference)
         except ValueError as e:
@@ -105,26 +116,33 @@ class DatabaseServiceClient:
             logger.exception("Inference failed with the following error message: %s", e)
             raise ValueError("Failed to process image") from e
         
+        # Given the embeddings vector, search for closest matches
         try:
             response = await self.http_client.post("/search", json={
                 "vector": query_vector.tolist(),
                 "k": k
             })
             response.raise_for_status()
+
+            # Results is a list of closest matches returned from FAISS 
             return response.json().get("results", [])
+        
         except httpx.HTTPError as e:
-            logger.error(f"Search Service Error: {e}")
+            logger.exception("Search Service Error: %s", e)
             raise e
 
     async def add_image(self,
                         image: ImageInput,
                         metadata: Dict[str, Any]):
+        """Adds an image to the database"""
 
         self._ensure_models_loaded()
+
         if not (self.drive_service and self.drive_folder_id):
              raise ValueError("Google Drive not configured")
 
         def _prepare_data():
+            """Preprocesses the image to embeddings (for FAISS) and bytes (for Drive)"""
             image_arr = read_image(image) if isinstance(image, (str, Path)) else image
             
             face = self.face_detector.detect(image_arr)
@@ -141,10 +159,13 @@ class DatabaseServiceClient:
             
             return emb, img_bytes
 
+        # Run in threadpool so that it doesn't block other requests
         embedding, image_bytes = await run_in_threadpool(_prepare_data)
 
+        # Generate a new uuid
         new_uuid = str(uuid.uuid4())
         
+        # Upload to Drive
         def _upload_sync():
             return upload_bytes_to_folder(
                 service=self.drive_service,
@@ -160,10 +181,12 @@ class DatabaseServiceClient:
         if not drive_id:
             raise ValueError("Drive upload failed")
 
+        # Get the name of the data from the metadata
+        # Can be found in the data source json file or if it's a user upload, then it's user
         source_name = metadata.get('name', 'Unknown')
         
+        # Adds the data to PostgreSQL and FAISS
         try:
-            # Atomic DB Insert (Postgres + FAISS via Remote Service)
             await self.http_client.post("/add", json={
                 "vector": embedding.tolist(),
                 "drive_file_id": drive_id,  
@@ -174,19 +197,23 @@ class DatabaseServiceClient:
                     "drive_link": f"https://drive.google.com/uc?id={drive_id}"
                 }
             })
-            logger.info(f"Image successfully saved: {source_name} ({new_uuid})")
+
+            logger.info("Image successfully saved: %s (%s)", source_name, new_uuid)
             return new_uuid
 
         except Exception as e:
-            logger.exception(f"Failed to persist data remotely: {e}")
-            logger.info(f"Initiating Compensating Transaction: Rollback Drive Upload {drive_id}...")
+            logger.exception("Failed to persist data remotely: %s", e)
+            logger.info("Rollback Drive Upload %s...", drive_id)
 
             def _rollback_sync():
                 try:
                     self.drive_service.files().delete(fileId=drive_id).execute()
-                    logger.info(f"Rollback successful: Deleted orphaned file {drive_id}")
+                    logger.info("Rollback successful: Deleted orphaned file %s", drive_id)
                 except Exception as cleanup_error:
-                    logger.critical(f"Could not delete {drive_id} during rollback. Manual cleanup required. Error: {cleanup_error}")
+                    logger.critical(
+                        "Could not delete %s during rollback. Manual cleanup required. Error: %s",
+                        drive_id, cleanup_error
+                    )
 
             await run_in_threadpool(_rollback_sync)
             
@@ -194,11 +221,13 @@ class DatabaseServiceClient:
 
     async def delete_image_by_uuid(self, uuid_str: str) -> bool:
         """
-        Senior Pattern: Delete from Access Layer (DB) first, then Asset Layer (Drive).
+        Delete from Access Layer (DB) first, then Asset Layer (Drive).
         """
+        # Can't delete if drive_service is None
         if not self.drive_service:
             return False
 
+        # Get the file metadata from Drive
         def _lookup_file():
             return get_file_by_uuid(self.drive_service, uuid_str)
         
@@ -211,21 +240,21 @@ class DatabaseServiceClient:
         drive_file_id = file_info.get('id')
 
         # Delete from PostgreSQL and FAISS first
-        # This ensures we never have "Zombie Files" (Files that exist but result in 404s).
+        # This will ensure there are no zombie files (metadata exists, but image no)
         try:
             await self.http_client.post("/delete", json={"drive_file_id": drive_file_id})
-            logger.info(f"Database record deleted for {drive_file_id}")
+            logger.info("Database record deleted for %s", drive_file_id)
         except Exception as e:
-            logger.error(f"Remote delete failed: {e}. Aborting Drive deletion to prevent broken links.")
+            logger.exception("Remote delete failed: %s. Aborting Drive deletion to prevent broken links.", e)
             return False
 
-        # If this fails, we log an orphan but return True (User intent satisfied).
+        # If this fails, we log an orphan but return True (User intent is satisfied).
         def _delete_sync():
             try:
                 self.drive_service.files().delete(fileId=drive_file_id).execute()
                 return True
             except Exception as e:
-                logger.critical(f"Database deleted, but Drive delete failed for {drive_file_id}. Error: {e}")
+                logger.critical("Database deleted, but Drive delete failed for %s. Error: %s", drive_file_id, e)
                 return True 
 
         return await run_in_threadpool(_delete_sync)
@@ -235,9 +264,12 @@ class DatabaseServiceClient:
         """
         Lazy loading of models.
         """
-        if self.face_detector and self.embedder: return
-        logger.info("Loading Models...")
+        if self.face_detector and self.embedder:
+            return
         
+        logger.info("Loading Models...")
+
+        # Loads configs first
         if self.face_detect_model_config is None:
             validate_model(self.face_detect_model_path)
             self.face_detect_model_config = read_model_config(self.face_detect_model_path)
@@ -246,5 +278,6 @@ class DatabaseServiceClient:
             validate_model(self.embeddings_model_path)
             self.embeddings_model_config = read_model_config(self.embeddings_model_path)
 
+        # Loads the models given the config
         self.face_detector = load_model(self.face_detect_model_config)
         self.embedder = load_model(self.embeddings_model_config)

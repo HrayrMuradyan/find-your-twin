@@ -11,25 +11,28 @@ load_dotenv()
 
 class VectorDB:
     def __init__(self):
-        # Load DB connection string from environment
+        # Load PostgreSQL DB connection string from environment
         self.db_dsn = os.getenv("DB_CONNECTION_STRING")
         if not self.db_dsn:
             logging.error("DB_CONNECTION_STRING environment variable is missing")
             raise ValueError("Missing DB Config")
         
+        # Build FAISS index from existing vectors in Postgres
+
         self.index = None          
         self.metadata_map = {}    
 
-        # Build FAISS index from existing vectors in Postgres
         self._build_faiss_from_postgres()
 
     def _build_faiss_from_postgres(self):
         logger.info("Building FAISS Index from Postgres...")
         try:
+            # Connect to postgres
             conn = psycopg2.connect(self.db_dsn)
             cursor = conn.cursor()
 
             # Fetch stored embedding dimension from metadata table
+            # Used to create FAISS
             cursor.execute("SELECT value FROM index_metadata WHERE key = 'dim'")
             row = cursor.fetchone()
             if not row:
@@ -37,7 +40,7 @@ class VectorDB:
                 raise ValueError("Dimension metadata not found in DB")
             dim = int(row[0])
 
-            # Initialize FAISS index (Inner Product used for cosine similarity on normalized vectors)
+            # Initialize FAISS index
             self.index = faiss.IndexIDMap(faiss.IndexFlatIP(dim))
 
             # Fetch all stored embeddings and metadata
@@ -68,7 +71,7 @@ class VectorDB:
                 ids_np = np.array(ids_list, dtype=np.int64)
                 vecs_np = np.array(vectors_list, dtype=np.float32)
                 
-                # Normalize vectors because inner product ≈ cosine similarity only after normalization
+                # Normalize vectors
                 faiss.normalize_L2(vecs_np)
                 
                 self.index.add_with_ids(vecs_np, ids_np)

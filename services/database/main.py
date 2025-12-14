@@ -136,12 +136,15 @@ def add_item(payload: AddPayload):
         logger.exception("Add error")
         raise HTTPException(500, "Failed to persist data")
     finally:
-        if 'cursor' in locals() and cursor: cursor.close()
-        if 'conn' in locals() and conn: conn.close()
+        if 'cursor' in locals() and cursor:
+            cursor.close()
+        if 'conn' in locals() and conn:
+            conn.close()
 
 @app.post("/delete")
 def delete_item(payload: DeletePayload):
-    if not vectordb: raise HTTPException(503, "Database not initialized")
+    if not vectordb:
+        raise HTTPException(503, "Database not initialized")
     
     try:
         conn = get_db_connection()
@@ -172,8 +175,10 @@ def delete_item(payload: DeletePayload):
         logger.exception("Delete error")
         raise HTTPException(500, str(e))
     finally:
-        if 'cursor' in locals() and cursor: cursor.close()
-        if 'conn' in locals() and conn: conn.close()
+        if 'cursor' in locals() and cursor:
+            cursor.close()
+        if 'conn' in locals() and conn:
+            conn.close()
 
 @app.get("/health")
 def health():

@@ -3,6 +3,8 @@ import numpy as np
 from unittest.mock import MagicMock, patch
 from PIL import Image
 import find_your_twin.image as image
+import sys
+import importlib
 
 @patch("find_your_twin.image.cv2.imread")
 def test_read_image_success_numpy(mock_imread, tmp_path):
@@ -95,3 +97,48 @@ def test_resize_image_boundary():
     
     assert result.size == (200, 150)
     assert result is img
+
+
+def test_show_image_handles_missing_matplotlib(capsys):
+    """
+    Verifies that show_image prints a warning and returns safely
+    if plt is None (simulating matplotlib not installed).
+    """
+    with patch("find_your_twin.image.plt", None):
+        img = np.zeros((100, 100, 3), dtype=np.uint8)
+        
+        # Call the function
+        image.show_image(img)
+        
+        # Capture stdout to verify the print statement
+        captured = capsys.readouterr()
+        assert "Matplotlib is not installed. Skipping visualization." in captured.out
+
+def test_optional_import_sets_plt_to_none():
+    """
+    Verifies that the module sets 'plt' to None if importing matplotlib fails.
+    This requires reloading the module in a controlled environment.
+    """
+    # Explicitly remove matplotlib to force a re-import attempt,
+    with patch.dict(sys.modules, {"matplotlib.pyplot": None, "matplotlib": None}):
+        
+        import builtins
+        original_import = builtins.__import__
+
+        def mock_import(name, *args, **kwargs):
+            if name.startswith("matplotlib"):
+                raise ImportError("Simulated Matplotlib Missing")
+            return original_import(name, *args, **kwargs)
+
+        with patch("builtins.__import__", side_effect=mock_import):
+            # Run the top-level code in image.py again
+            importlib.reload(image)
+            
+            # Verify plt is None
+            assert image.plt is None
+
+    # Reload the module again normally to restore it for other tests
+    importlib.reload(image)
+    
+    # Verify it's back
+    assert image.plt is not None

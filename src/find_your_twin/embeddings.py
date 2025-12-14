@@ -67,6 +67,7 @@ class DeepFaceEmbedder:
             )
 
         try:
+            # Resize and normalize the image
             resized_img = preprocessing.resize_image(
                 img=image,
                 target_size=self.target_size

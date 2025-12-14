@@ -19,6 +19,58 @@ document.addEventListener('DOMContentLoaded', () => {
 
     console.log(`Environment detected: ${isLocalEnvironment ? 'DEVELOPMENT' : 'PRODUCTION'}`);
 
+    const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+    const navLinksContainer = document.querySelector('.nav-links'); // Using class to target nav
+    let menuIcon = null;
+
+    if (mobileMenuBtn) {
+        menuIcon = mobileMenuBtn.querySelector('i');
+    }
+
+    function toggleMenu() {
+        if (!navLinksContainer) return;
+        
+        navLinksContainer.classList.toggle('active');
+        
+        if (menuIcon) {
+            // Toggle icon between 'menu' and 'x'
+            if (navLinksContainer.classList.contains('active')) {
+                menuIcon.classList.remove('bx-menu');
+                menuIcon.classList.add('bx-x');
+            } else {
+                menuIcon.classList.remove('bx-x');
+                menuIcon.classList.add('bx-menu');
+            }
+        }
+    }
+
+    // Toggle on button click
+    if (mobileMenuBtn) {
+        mobileMenuBtn.addEventListener('click', (e) => {
+            e.stopPropagation(); 
+            toggleMenu();
+        });
+    }
+
+    // Close menu when a link is clicked
+    const allNavLinks = document.querySelectorAll('.nav-link');
+    allNavLinks.forEach(link => {
+        link.addEventListener('click', () => {
+            if (navLinksContainer && navLinksContainer.classList.contains('active')) {
+                toggleMenu();
+            }
+        });
+    });
+
+    // Close menu if clicking outside of it
+    document.addEventListener('click', (e) => {
+        if (navLinksContainer && navLinksContainer.classList.contains('active') && 
+            !navLinksContainer.contains(e.target) && 
+            mobileMenuBtn && !mobileMenuBtn.contains(e.target)) {
+            toggleMenu();
+        }
+    });
+
     // Startup & Health Check Logic
     
     const startupOverlay = document.getElementById('startup-overlay');

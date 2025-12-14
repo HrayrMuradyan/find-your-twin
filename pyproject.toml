@@ -50,3 +50,6 @@ config_path = "configs/main.yaml"
 omit = [
     "*/logging_config.py", 
 ]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"

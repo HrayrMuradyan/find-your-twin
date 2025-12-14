@@ -21,7 +21,7 @@ load_dotenv()
 CLIENT_SECRET_FILE_PATH = PROJECT_ROOT / os.getenv("GOOGLE_CLIENT_SECRET_PATH", "credentials/client_secret.json")
 TOKEN_FILE_PATH = PROJECT_ROOT / os.getenv("GOOGLE_TOKEN_PATH", "credentials/token.json")
 SCOPES = ['https://www.googleapis.com/auth/drive.file']
-APP_FOLDER_NAME = "face-similarity"
+DRIVE_FOLDER_NAME = "face-similarity"
 
 def get_drive_service():
     """
@@ -110,6 +110,7 @@ def list_all_files(service, page_size=100):
 
             if not page_token:
                 break
+
         except Exception as e:
             logger.exception("Error listing files: %s", e)
             break
@@ -127,9 +128,7 @@ def get_or_create_app_folder(service):
     
     try:
         # Search for the folder
-        # 'q' is the query string. We're looking for a folder with our app's name.
-        # The `drive.file` scope means we can only find folders this app has created.
-        query = f"mimeType='application/vnd.google-apps.folder' and name='{APP_FOLDER_NAME}' and trashed=false"
+        query = f"mimeType='application/vnd.google-apps.folder' and name='{DRIVE_FOLDER_NAME}' and trashed=false"
         response = service.files().list(q=query, spaces='drive', fields='files(id, name)').execute()
         files = response.get('files', [])
 
@@ -137,23 +136,23 @@ def get_or_create_app_folder(service):
             folder_id = files[0].get('id')
             logging.info(
                 "Found an existing app folder: %s (ID: %s)",
-                APP_FOLDER_NAME,
+                DRIVE_FOLDER_NAME,
                 folder_id
             )
 
             return folder_id
         else:
             # Folder not found, create it
-            logging.info("App folder %s not found. Creating it...", APP_FOLDER_NAME)
+            logging.info("App folder %s not found. Creating it...", DRIVE_FOLDER_NAME)
             file_metadata = {
-                'name': APP_FOLDER_NAME,
+                'name': DRIVE_FOLDER_NAME,
                 'mimeType': 'application/vnd.google-apps.folder'
             }
             folder = service.files().create(body=file_metadata, fields='id').execute()
             folder_id = folder.get('id')
             logging.info(
                 "Successfully created app folder: %s (ID: %s)",
-                APP_FOLDER_NAME,
+                DRIVE_FOLDER_NAME,
                 folder_id
             )
             return folder_id
@@ -314,9 +313,9 @@ def get_image_bytes_by_id(service, file_id):
     except HttpError as error:
         logging.exception("An error occurred downloading the file: %s", error)
         if error.resp.status == 404:
-            logging.error("Error: File not found. Check the file ID.")
+            logging.error("File not found. Check the file ID.")
         elif error.resp.status == 403:
-             logging.error("Error: Permission denied. Does your app have access to this specific file?")
+             logging.error("Permission denied. Does your app have access to this specific file?")
              logging.error("With 'drive.file' scope, your app can only access files it created.")
         return None
     except Exception as e:
@@ -448,9 +447,9 @@ def delete_file_by_id(service, file_id):
     except HttpError as error:
         logging.exception("An error occurred deleting the file: %s", error)
         if error.resp.status == 404:
-            logging.exception("Error: File not found or already deleted.")
+            logging.exception("File not found or already deleted.")
         elif error.resp.status == 403:
-            logging.exception("Error: Permission denied. Your app may not own this file.")
+            logging.exception("Permission denied. Your app may not own this file.")
         return False
 
     except Exception as e:

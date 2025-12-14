@@ -98,6 +98,7 @@ class SCR_Face_Detector:
         sorted_results = sorted(results, key=get_area, reverse=True)
         
         return sorted_results[0]
+        
 
     def detect(self, img):
         """
@@ -129,7 +130,7 @@ class SCR_Face_Detector:
         best_score = self._get_max_score(best_results)
         working_image = image
 
-        # Fallback: rotate image if initial detection is weak
+        # Rotate image if initial detection is weak
         if self.rotation_angles and best_score < self.rotate_when_score_lt:
             for angle in self.rotation_angles:
                 rot_img = image.rotate(angle, expand=True)
