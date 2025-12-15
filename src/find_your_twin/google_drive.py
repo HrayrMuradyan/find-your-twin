@@ -321,6 +321,24 @@ def get_image_bytes_by_id(service, file_id):
     except Exception as e:
         logging.exception("An unexpected error occurred: %s", e)
         return None
+    
+def get_image_bytes_by_id(service, file_id):
+    """
+    Downloads a file's content directly into memory using a single request.
+    Optimized for small files like images.
+    """
+    if not service:
+        logging.warning("Service is missing, cannot download.")
+        return None
+        
+    logging.info("Downloading file ID: %s...", file_id)
+    
+    try:
+        return service.files().get_media(fileId=file_id).execute()
+        
+    except Exception as e:
+        logging.exception("An error occurred downloading the file: %s", e)
+        return None
 
 def get_image_base64_by_id(service, file_id, mime_type="image/jpeg"):
     """

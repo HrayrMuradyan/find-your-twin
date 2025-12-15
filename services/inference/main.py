@@ -2,8 +2,10 @@ import uvicorn
 import numpy as np
 from PIL import Image, ImageOps
 import io
+import threading  # <--- ADDED
 from fastapi import FastAPI, File, UploadFile, Form, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.concurrency import run_in_threadpool
 from pathlib import Path
 import logging
 import os
@@ -59,8 +61,26 @@ app.add_middleware(
 
 # Global State
 db_client: DatabaseServiceClient = None
-drive_service = None
 drive_folder_id = None
+
+# Thread Local Storage
+# Used for multithreading to improve google drive downloading
+_thread_local = threading.local()
+
+def get_thread_safe_service():
+    """
+    Returns a Google Drive service instance unique to the current thread.
+    """
+    if not hasattr(_thread_local, "service"):
+        # If this thread doesn't have a service yet, create one.
+        _thread_local.service = get_drive_service()
+    return _thread_local.service
+
+# Wrapper for the threaded execution
+def _download_worker(file_id: str):
+    service = get_thread_safe_service()
+    return get_image_bytes_by_id(service, file_id)
+
 
 # Configs
 FACE_DETECT_MODEL = Path(CONFIG['models']['paths']['face_detect_model'])
@@ -76,26 +96,29 @@ SAVE_SIMILARITY_THRESHOLD = int(CONFIG['search']['save_similarity_threshold'])
 
 @app.on_event("startup")
 def startup_event():
-    global db_client, drive_service, drive_folder_id
+    global db_client, drive_folder_id
     
     logger.info("--- Inference Service Starting ---")
     try:
         logger.info("Initializing the Credentials...")
         setup_google_credentials(script_dir)
 
-        logger.info("Initializing Google Drive service...")
-        drive_service = get_drive_service()
-        if drive_service:
-            drive_folder_id = get_or_create_app_folder(drive_service)
+        # Initialize one service just to check connection & get folder ID
+        logger.info("Initializing Google Drive service (Main Thread)...")
+        main_service = get_drive_service()
+        
+        if main_service:
+            drive_folder_id = get_or_create_app_folder(main_service)
             logger.info("Google Drive initialized. Folder ID: %s", drive_folder_id)
         else:
             logger.error("Failed to initialize Google Drive. Check ENV vars.")
 
         logger.info("Initializing ML Models & Database Connection...")
+
         db_client = DatabaseServiceClient(
             face_detect_model=FACE_DETECT_MODEL,
             embeddings_model=EMBEDDINGS_MODEL,
-            drive_service=drive_service,
+            drive_service=main_service, 
             drive_folder_id=drive_folder_id
         )
         logger.info("Inference Service Ready")
@@ -149,16 +172,14 @@ async def search_image(
         top_result = formatted_results[0]
         other_results = formatted_results[1:]
         
-        # We want all other results to be in the similarity threshold
-        # But don't want to remove all images if they all fall below the threshold
-        # Thus, save at least MIN_OTHER_IMAGES instances
+        MAX_OTHER_IMAGES = 10 
         
         valid_others = [
             res for res in other_results if res['similarity'] >= RETRIEVAL_SIMILARITY_THRESHOLD
         ]
         final_others = valid_others if len(valid_others) >= MIN_OTHER_IMAGES else other_results[:MIN_OTHER_IMAGES]
         
-        response_data = {"results": [top_result] + final_others}
+        response_data = {"results": [top_result] + final_others[:MAX_OTHER_IMAGES]}
     else:
         response_data = {"results": []}
 
@@ -169,10 +190,9 @@ async def search_image(
         else:
             try:
                 logger.info("Consent given. Saving new face...")
-                # Uploads to Drive -> Insert DB (via remote) -> Update FAISS (via remote)
                 new_uuid = await db_client.add_image(
                     image=img_array, 
-                    metadata={'name': 'user_data'}
+                    metadata={'name': 'user_data', 'filename': file.filename}
                 )
                 response_data["uuid"] = new_uuid
             except Exception as e:
@@ -200,15 +220,24 @@ async def delete_image_by_uuid(uuid: str):
 
 @app.get("/gdrive-image/{file_id}")
 async def get_gdrive_image(file_id: str):
-    global drive_service
-    if not drive_service:
+    # Check if folder ID is loaded (implies system is ready)
+    if not drive_folder_id:
         raise HTTPException(status_code=503, detail="Service unavailable.")
+    
     try:
-        image_bytes = get_image_bytes_by_id(drive_service, file_id)
+        # Run download in a thread, using a THREAD-LOCAL service instance
+        image_bytes = await run_in_threadpool(_download_worker, file_id)
+        
         if image_bytes:
-            return Response(content=image_bytes, media_type="image/jpeg")
+            # Cache for 1 year
+            return Response(
+                content=image_bytes, 
+                media_type="image/jpeg",
+                headers={}
+            )
         else:
             raise HTTPException(status_code=404, detail="Image not found.")
+            
     except Exception as e:
         logger.exception("Proxy error: %s", e)
         raise HTTPException(status_code=500, detail="Internal error.")
@@ -229,6 +258,5 @@ def health_check():
     return {"status": "ok"}
 
 if __name__ == "__main__":
-    # Read port from env, default to 7860
     port = int(os.getenv("INFERENCE_PORT", 7860))
     uvicorn.run("main:app", host="0.0.0.0", port=port)

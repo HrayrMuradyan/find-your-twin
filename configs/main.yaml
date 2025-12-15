@@ -25,6 +25,7 @@ data:
 search:
   retrieval_similarity_threshold: 30
   min_other_images: 5
+  max_other_images: 15
   k_to_search: 21
   save_similarity_threshold: 95
 
