@@ -2,6 +2,7 @@ from pathlib import Path
 import numpy as np
 import logging
 import httpx
+import asyncio
 from typing import Any, Dict, List, Optional, Union
 import uuid
 import io
@@ -77,17 +78,28 @@ class DatabaseServiceClient:
         await self.http_client.aclose()
 
     async def get_index_count(self) -> Dict:
-        """Get the number of observations in the FAISS db"""
-        try:
-            resp = await self.http_client.get("/health")
-            resp.raise_for_status()
+        """Get the number of observations in the FAISS db with Retry Logic"""
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                resp = await self.http_client.get("/health")
+                resp.raise_for_status()
 
-            # Returns: {"status": "ok", "count": N of observations}
-            return resp.json()
-        
-        except Exception as e:
-            logger.exception("Health check failed: %s", e)
-            return {"count": 0}
+                # Returns: {"status": "ok", "count": N of observations}
+                return resp.json()
+            
+            except (httpx.RemoteProtocolError, httpx.ReadTimeout, httpx.ConnectError) as e:
+                # If the connection was stale, this block catches it and retries
+                logger.warning(f"Stale connection on health check (Attempt {attempt+1}/{max_retries}). Retrying...")
+                if attempt == max_retries - 1:
+                    logger.error("Health check failed after retries.")
+                    return {"count": 0}
+                
+                await asyncio.sleep(0.1)
+                
+            except Exception as e:
+                logger.exception("Health check failed: %s", e)
+                return {"count": 0}
 
     async def search_image(self, image: ImageInput, k: int = 5):
         """Search closest matches for an image"""
@@ -193,6 +205,7 @@ class DatabaseServiceClient:
                 "source": source_name,
                 "metadata": {
                     "name": source_name,
+                    "filename": new_uuid,
                     "drive_id": drive_id,
                     "drive_link": f"https://drive.google.com/uc?id={drive_id}"
                 }

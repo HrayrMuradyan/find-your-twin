@@ -247,7 +247,9 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!dbStatsContainer || !dbCountNumber) return;
         
         try {
-            const response = await fetch(`${API_BASE_URL}/stats`);
+            // FIX: Added timestamp to prevent browser caching
+            const response = await fetch(`${API_BASE_URL}/stats?t=${new Date().getTime()}`);
+            
             if (!response.ok) return;
 
             const data = await response.json();
@@ -264,6 +266,8 @@ document.addEventListener('DOMContentLoaded', () => {
             } else {
                 // Update after upload
                 const currentVal = parseInt(dbCountNumber.textContent.replace(/,/g, '')) || 0;
+                
+                // Only update if count has changed
                 if (finalCount !== currentVal) {
                     dbCountNumber.innerHTML = finalCount.toLocaleString();
                     dbCountNumber.classList.remove('count-pop');
