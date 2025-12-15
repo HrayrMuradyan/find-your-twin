@@ -3,20 +3,14 @@ import psycopg2
 from dotenv import load_dotenv
 from pathlib import Path
 
-# Add the root to the path
-import sys
-script_dir = Path(__file__).parent
-PROJECT_ROOT = script_dir.parent
-sys.path.append(str(PROJECT_ROOT))
-
 # Setup Logging
 import logging
-from src.logging_config import setup_logging
+from find_your_twin.logging_config import setup_logging
 setup_logging()
 logger = logging.getLogger(__name__)
 
-from src.logging_config import setup_logging
-from src.google_drive import get_drive_service, get_or_create_app_folder
+from find_your_twin.logging_config import setup_logging
+from find_your_twin.google_drive import get_drive_service, get_or_create_app_folder
 
 
 # Load Environment Variables
@@ -90,8 +84,11 @@ def clear_database():
                 logging.info("Google Drive folder deleted successfully")
             else:
                 logging.warning("Could not resolve App Folder ID.")
+                logging.warning("The folder looks deleted. Please manually confirm it.")
+                
         else:
-            logging.error("Failed to initialize Drive service. Skipping Drive deletion.")
+            logging.critical("Failed to initialize Drive service. Skipping Drive deletion.")
+            logging.critical("Check the database. Metadata should have been deleted, but Drive not.")
 
     except Exception as e:
         logging.exception("Google Drive Error: %s", e)

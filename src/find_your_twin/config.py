@@ -2,7 +2,32 @@ from pathlib import Path
 import yaml
 import tomli
 
-PROJECT_ROOT = Path.cwd()
+def get_project_root() -> Path:
+    """
+    Robustly find the project root.
+    1. Check current working directory (Docker /app usually).
+    2. Check relative to this file (Local dev).
+    """
+    # Check Current Working Directory
+    # In Docker, you are usually in /app, where pyproject.toml lives.
+    cwd = Path.cwd()
+    if (cwd / "pyproject.toml").exists():
+        return cwd
+
+    # Check Relative Path (Best for Local Dev / Source)
+    # Walk up from this file until we find pyproject.toml
+    current_path = Path(__file__).resolve()
+    for _ in range(4):  
+        current_path = current_path.parent
+        if (current_path / "pyproject.toml").exists():
+            return current_path
+            
+    raise ValueError(
+        f"Could not find project root (pyproject.toml). "
+        f"Checked CWD: {cwd} and parents of {Path(__file__)}"
+    )
+
+PROJECT_ROOT = get_project_root()
 
 def get_config_path() -> str:
     """

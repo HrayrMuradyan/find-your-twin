@@ -1,30 +1,25 @@
-import sys
 import asyncio
 import logging
 import threading
-import json
 import io
 import time
 import os
 import psycopg2 
-import numpy as np
 from pathlib import Path
 from PIL import Image
 from dotenv import load_dotenv
 
-# Add project root to sys.path
-script_dir = Path(__file__).parent
-PROJECT_ROOT = script_dir.parent
-sys.path.append(str(PROJECT_ROOT))
+# Define the project root
+PROJECT_ROOT = Path(__file__).parent.parent
 
 # Imports from your src modules
-from src.logging_config import setup_logging
-from src.config import load_config
-from src.google_drive import get_drive_service, get_or_create_app_folder
-from src.image import read_image
-from src.file import read_json
-from src.validation import validate_model
-from src.model import read_model_config, load_model
+from find_your_twin.logging_config import setup_logging
+from find_your_twin.config import load_config
+from find_your_twin.google_drive import get_drive_service, get_or_create_app_folder
+from find_your_twin.image import read_image
+from find_your_twin.file import read_json
+from find_your_twin.validation import validate_model
+from find_your_twin.model import read_model_config, load_model
 
 # Setup logging, get the env variables
 setup_logging()
@@ -141,7 +136,7 @@ class DirectUploader:
                 logger.warning(f"Upload failed for {filename} (Attempt {attempt+1}): {e}")
                 time.sleep(2) 
             except Exception as e:
-                logger.error(f"Fatal drive error: {e}")
+                logger.exception(f"Fatal drive error: {e}")
                 raise e
         
         raise ConnectionError("Failed to upload to Drive after 3 attempts")
@@ -263,9 +258,6 @@ def scan_data_sources(data_root: Path):
             if p.suffix.lower() in valid_ext:
                 all_paths.append(str(p))
                 all_metas.append(base_meta.copy())
-
-        all_metas = all_metas[:10000]
-        all_paths = all_paths[:10000] 
                 
     return all_paths, all_metas
 

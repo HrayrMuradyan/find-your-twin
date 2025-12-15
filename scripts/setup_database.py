@@ -4,19 +4,16 @@ from dotenv import load_dotenv
 from pathlib import Path
 
 # Add the root to the path
-import sys
-script_dir = Path(__file__).parent
-PROJECT_ROOT = script_dir.parent
-sys.path.append(str(PROJECT_ROOT))
+PROJECT_ROOT = Path(__file__).parent.parent
 
 # Setup Logging
 import logging
-from src.logging_config import setup_logging
+from find_your_twin.logging_config import setup_logging
 setup_logging()
 logger = logging.getLogger(__name__)
 
-from src.config import load_config
-from src.model import read_model_config
+from find_your_twin.config import load_config
+from find_your_twin.model import read_model_config
 
 # Load Environment Variables
 load_dotenv()
@@ -61,14 +58,14 @@ CREATE_TABLES = [
 
     # Create the image metadata table
     # This stores the raw vector and metadata.
-    """
+    f"""
     CREATE TABLE IF NOT EXISTS face_data (
         id SERIAL PRIMARY KEY,
         source TEXT NOT NULL,
         original_filename TEXT NOT NULL,
         drive_file_id TEXT NOT NULL,
         created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-        embedding vector(512)
+        embedding vector({embeddings_config['parameters']['dim']})
     );
     """
 ]
