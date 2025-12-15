@@ -143,7 +143,7 @@ docker run -it \
   database:latest
 ```
 
-The Inference API will be available at: `http://localhost:7860`.
+The Inference API will be available at: `http://localhost:7860`.  
 The Database API will be available at: `http://localhost:8800`.
 
 ### 5. Host the Frontend
@@ -154,7 +154,7 @@ To enable real HTTP origin, it's better to run the frontend as a local server:
 python -m http.server 8000 --directory docs
 ```
 
-The fronend will be available at: `http://localhost:8800`.
+The fronend will be available at: `http://localhost:8000`.
 
 ## Limitations
 
