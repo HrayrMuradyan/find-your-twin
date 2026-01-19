@@ -10,79 +10,87 @@ from dotenv import load_dotenv
 import io
 import base64
 import logging
+import json
 logger = logging.getLogger(__name__)
 
 from pathlib import Path
-from find_your_twin.config import PROJECT_ROOT
+from find_your_twin.config import PROJECT_ROOT, load_config
 from find_your_twin.utils import blur_str
 
 load_dotenv()
+CONFIG = load_config()
 
 CLIENT_SECRET_FILE_PATH = PROJECT_ROOT / os.getenv("GOOGLE_CLIENT_SECRET_PATH", "credentials/client_secret.json")
 TOKEN_FILE_PATH = PROJECT_ROOT / os.getenv("GOOGLE_TOKEN_PATH", "credentials/token.json")
-SCOPES = ['https://www.googleapis.com/auth/drive.file']
-DRIVE_FOLDER_NAME = "face-similarity"
+SCOPES = list(CONFIG['drive']['scopes'])
+DRIVE_FOLDER_NAME = str(CONFIG['drive']['folder_name'])
 
 def get_drive_service():
     """
     Authenticates and returns a Google Drive API service object.
+    Supports Raw JSON from Environment Variables and local token.json.
     """
     creds = None
-    # Check if the token file exists
-    if TOKEN_FILE_PATH.exists():
+    
+    # 1. Try loading directly from the Environment Variable (Production/Docker)
+    # This avoids disk I/O and works perfectly with Hugging Face Secrets.
+    env_token_json = os.getenv("GOOGLE_TOKEN_JSON")
+    
+    if env_token_json:
+        try:
+            logger.info("Loading Google Drive credentials from Environment Variable...")
+            token_data = json.loads(env_token_json)
+            creds = Credentials.from_authorized_user_info(token_data, SCOPES)
+        except Exception as e:
+            logger.error("Failed to parse GOOGLE_TOKEN_JSON from environment: %s", e)
+
+    # 2. Fallback to local token.json file (Local Development)
+    if not creds and TOKEN_FILE_PATH.exists():
+        logger.info("Loading credentials from local file: %s", TOKEN_FILE_PATH)
         creds = Credentials.from_authorized_user_file(TOKEN_FILE_PATH, SCOPES)
 
-    # If there are no (valid) credentials available, let the user log in.
+    # 3. Handle Refreshing or Initial Authorization
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
-            logger.info("Refreshing expired credentials of Google Drive API...")
+            logger.info("Refreshing expired Google Drive access token...")
             try:
                 creds.refresh(Request())
-                logger.info("Successfuly refreshed the expired credentials of Google Drive API. Ready to use.")
-
+                
+                # Update the local file ONLY if it already exists (Local Dev only)
+                if TOKEN_FILE_PATH.exists() and os.getenv("ENVIRONMENT") != "production":
+                    with open(TOKEN_FILE_PATH, 'w') as token:
+                        token.write(creds.to_json())
+                    logger.info("Local token.json updated with refreshed credentials.")
             except Exception as e:
-                logger.exception("Error refreshing token: %s", e)
-                logger.exception("Could not refresh token. Please re-authenticate.")
-                TOKEN_FILE_PATH.unlink()
+                logger.error("Token refresh failed: %s", e)
                 creds = None 
-        
-        # If no valid token, run the auth flow
+
+        # 4. Final Fallback: Trigger Browser Login (LOCAL ONLY)
         if not creds:
-            if not CLIENT_SECRET_FILE_PATH.exists():
-                logging.error(
-                    "Secret file path not found: %s",
-                    str(CLIENT_SECRET_FILE_PATH)
+            # Prevent production from hanging on a browser request
+            if str(os.getenv("ENVIRONMENT")) == "production":
+                raise PermissionError(
+                    "No valid Google credentials found. Ensure GOOGLE_TOKEN_JSON is set in secrets."
                 )
-                logging.error("Please download it from your Google Cloud project's")
-                logging.error("OAuth 2.0 Credentials page and place it in this directory.")
+            
+            if not CLIENT_SECRET_FILE_PATH.exists():
+                logger.error("Client secret file missing at %s", CLIENT_SECRET_FILE_PATH)
                 return None
             
-            logging.error(
-                "Token not found at %s not found or invalid, starting new auth flow...",
-                str(TOKEN_FILE_PATH)
-            )
-            
-            flow = InstalledAppFlow.from_client_secrets_file(
-                str(CLIENT_SECRET_FILE_PATH), SCOPES)
+            logger.info("Starting manual OAuth flow...")
+            flow = InstalledAppFlow.from_client_secrets_file(str(CLIENT_SECRET_FILE_PATH), SCOPES)
             creds = flow.run_local_server(port=0)
 
-        # Save the credentials for the next run
-        with open(TOKEN_FILE_PATH, 'w') as token:
-            token.write(creds.to_json())
-            logging.info(
-                "Credentials saved to %s", 
-                TOKEN_FILE_PATH.relative_to(PROJECT_ROOT)
-            )
+            # Save the new token for future local use
+            with open(TOKEN_FILE_PATH, 'w') as token:
+                token.write(creds.to_json())
 
     try:
         service = build('drive', 'v3', credentials=creds)
-        logging.info("Google Drive service created successfully.")
+        logger.info("Google Drive service initialized successfully.")
         return service
-    except HttpError as error:
-        logging.exception("An error occurred building the service: %s", error)
-        return None
     except Exception as e:
-        logging.exception("An unexpected error occurred: %s", e)
+        logger.exception("Failed to build Google Drive service: %s", e)
         return None
     
 

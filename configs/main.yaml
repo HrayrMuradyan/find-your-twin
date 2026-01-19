@@ -22,6 +22,11 @@ data:
   upload_max_workers: 8
   temp_file: "batch_processing_temp.parquet"
 
+drive:
+  scopes: 
+    - "https://www.googleapis.com/auth/drive.file"
+  folder_name: "face-similarity"
+
 search:
   retrieval_similarity_threshold: 30
   min_other_images: 5

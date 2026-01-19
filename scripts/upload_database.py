@@ -276,6 +276,9 @@ async def main():
     
     # Scan
     paths, metas = scan_data_sources(DATASET_ROOT)
+
+    paths, metas = paths[:1000], metas[:1000]
+    
     if not paths:
         logger.error("No images found.")
         return

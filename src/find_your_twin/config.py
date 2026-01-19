@@ -37,7 +37,7 @@ def get_config_path() -> str:
     and that it contains a section like:
 
         [tool.find_your_twin]
-        config_path = "configs/main.yaml"
+        config_path = "configs/mai"face-similarity"n.yaml"
 
     Returns:
         str: The relative or absolute path to the main config file,
